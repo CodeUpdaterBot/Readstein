@@ -1,0 +1,34 @@
+diff --git a/dist/legacy-runtime/runtime-cores/remote-thread-list/RemoteThreadListHookInstanceManager.js b/dist/legacy-runtime/runtime-cores/remote-thread-list/RemoteThreadListHookInstanceManager.js
+index ed6746709955e59997f79709526c2f3c4aa243dd..4d42ac945026c91aca6641c6b947b20c080335d3 100644
+--- a/dist/legacy-runtime/runtime-cores/remote-thread-list/RemoteThreadListHookInstanceManager.js
++++ b/dist/legacy-runtime/runtime-cores/remote-thread-list/RemoteThreadListHookInstanceManager.js
+@@ -77,9 +77,9 @@ export class RemoteThreadListHookInstanceManager extends BaseSubscribable {
+         const initPromiseRef = useRef(undefined);
+         useEffect(() => {
+             const runtimeCore = threadBinding.getState();
+-            const setGetInitializePromise = runtimeCore["__internal_setGetInitializePromise"];
++            const setGetInitializePromise = runtimeCore?.["__internal_setGetInitializePromise"];
+             if (typeof setGetInitializePromise === "function") {
+-                setGetInitializePromise(() => initPromiseRef.current);
++                setGetInitializePromise.call(runtimeCore, () => initPromiseRef.current);
+             }
+         }, [threadBinding]);
+         useEffect(() => {
+diff --git a/src/legacy-runtime/runtime-cores/remote-thread-list/RemoteThreadListHookInstanceManager.tsx b/src/legacy-runtime/runtime-cores/remote-thread-list/RemoteThreadListHookInstanceManager.tsx
+index 969328d75ec3a7e1f72b23b1ea2aae3a777d594d..7e6d92a323c0cc941f7f822527bad0b514952ebe 100644
+--- a/src/legacy-runtime/runtime-cores/remote-thread-list/RemoteThreadListHookInstanceManager.tsx
++++ b/src/legacy-runtime/runtime-cores/remote-thread-list/RemoteThreadListHookInstanceManager.tsx
+@@ -108,11 +108,11 @@ export class RemoteThreadListHookInstanceManager extends BaseSubscribable {
+ 
+     useEffect(() => {
+       const runtimeCore = threadBinding.getState();
+-      const setGetInitializePromise = (runtimeCore as Record<string, unknown>)[
++      const setGetInitializePromise = (runtimeCore as Record<string, unknown> | undefined)?.[
+         "__internal_setGetInitializePromise"
+       ];
+       if (typeof setGetInitializePromise === "function") {
+-        setGetInitializePromise(() => initPromiseRef.current);
++        setGetInitializePromise.call(runtimeCore, () => initPromiseRef.current);
+       }
+     }, [threadBinding]);
+ 

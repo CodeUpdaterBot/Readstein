@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-lan-library-stop"
+description = "Enables the lan_library_stop command without any pre-configured scope."
+commands.allow = ["lan_library_stop"]
+
+[[permission]]
+identifier = "deny-lan-library-stop"
+description = "Denies the lan_library_stop command without any pre-configured scope."
+commands.deny = ["lan_library_stop"]
