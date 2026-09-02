@@ -55,7 +55,9 @@ vi.mock('next/image', () => ({
 vi.mock('@/components/SupportLinks', () => ({ default: () => null }));
 vi.mock('@/components/LegalLinks', () => ({ default: () => null }));
 vi.mock('@/components/Link', () => ({
-  default: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+  default: ({ children, href }: { children: ReactNode; href?: string }) => (
+    <a href={href}>{children}</a>
+  ),
 }));
 vi.mock('@/components/Dialog', () => ({
   default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -128,7 +130,17 @@ describe('AboutWindow version label', () => {
     await openDialog();
 
     expect(screen.getByText('Readest Unlimited')).toBeTruthy();
-    expect(screen.getByText('Independent fork of Readest')).toBeTruthy();
+    expect(screen.getByText('a fork of Readest, by')).toBeTruthy();
+    expect(screen.getByText('SteStein')).toBeTruthy();
+    expect(screen.getByText(/New source:/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'SteStein' }).getAttribute('href')).toBe(
+      'https://stestein.com',
+    );
+    const githubLinks = screen.getAllByRole('link', { name: 'GitHub' });
+    expect(githubLinks).toHaveLength(2);
+    expect(githubLinks[1]!.getAttribute('href')).toBe(
+      'https://github.com/CodeUpdaterBot/Readstein',
+    );
     expect(screen.queryByText('Check Update')).toBeNull();
   });
 });

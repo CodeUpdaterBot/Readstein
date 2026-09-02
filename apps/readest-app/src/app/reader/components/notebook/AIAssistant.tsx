@@ -1,6 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef, Component, type ReactNode } from 'react';
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  Component,
+  type ReactNode,
+} from 'react';
 import {
   AssistantRuntimeProvider,
   useLocalRuntime,
@@ -31,6 +39,7 @@ import { isTauriAppPlatform } from '@/services/environment';
 import type { AppService } from '@/types/system';
 import { ReedyAssistant } from '@/services/reedy/ui/ReedyAssistant';
 import type { ReadingContextSnapshot } from '@/services/reedy/tools/builtins/types';
+import { getAIProvider } from '@/services/ai/providers';
 
 import { Button } from '@/components/ui/button';
 import { Loader2Icon, BookOpenIcon } from 'lucide-react';
@@ -66,7 +75,10 @@ class ChatRuntimeBoundary extends Component<{ children: ReactNode }, { error: Er
       return (
         <div className='flex h-full flex-col items-center justify-center gap-3 p-4 text-center'>
           <p className='text-foreground text-sm font-medium'>AI chat failed to start</p>
-          <p className='text-muted-foreground max-w-xs text-xs'>{this.state.error.message}</p>
+          <p className='text-muted-foreground max-w-xs text-xs'>
+            Error connecting to your configured AI provider. Open AI Assistant settings to verify
+            that everything is configured correctly and the provider is running.
+          </p>
           <Button size='sm' className='h-8 text-xs' onClick={() => this.setState({ error: null })}>
             Try again
           </Button>
@@ -226,6 +238,7 @@ const AIAssistantChat = ({
   return (
     <AIAssistantWithRuntime
       adapter={adapter}
+      aiSettings={aiSettings}
       historyAdapter={historyAdapter}
       onResetIndex={onResetIndex}
       isLoadingHistory={isLoadingHistory}
@@ -239,7 +252,7 @@ const AIAssistantChat = ({
   );
 };
 
-const AIAssistantWithRuntime = ({
+const AIAssistantRuntimeContent = ({
   adapter,
   historyAdapter,
   onResetIndex,
@@ -288,6 +301,74 @@ const AIAssistantWithRuntime = ({
       />
     </AssistantRuntimeProvider>
   );
+};
+
+type AIAssistantRuntimeProps = {
+  aiSettings: AISettings;
+  adapter: NonNullable<ReturnType<typeof createTauriAdapter>>;
+  historyAdapter?: ThreadHistoryAdapter;
+  onResetIndex: () => void;
+  isLoadingHistory: boolean;
+  hasActiveConversation: boolean;
+  sourceStore: ReedySourceStore;
+  currentTurnId: string | null;
+  onSourceClick?: (source: SourceItem) => void;
+  spoilerProtection: boolean;
+  onDisableSpoilerProtection: () => void;
+};
+
+const AIAssistantWithRuntime = ({ aiSettings, ...props }: AIAssistantRuntimeProps) => {
+  const [providerStatus, setProviderStatus] = useState<'checking' | 'available' | 'unavailable'>(
+    'checking',
+  );
+  const { setRequestedPanel, setSettingsDialogOpen } = useSettingsStore();
+
+  const openAISettings = useCallback(() => {
+    setRequestedPanel('AI');
+    setSettingsDialogOpen(true);
+  }, [setRequestedPanel, setSettingsDialogOpen]);
+
+  const checkProvider = useCallback(async () => {
+    setProviderStatus('checking');
+    try {
+      const available = await getAIProvider(aiSettings).isAvailable();
+      setProviderStatus(available ? 'available' : 'unavailable');
+    } catch {
+      setProviderStatus('unavailable');
+    }
+  }, [aiSettings]);
+
+  useEffect(() => {
+    void checkProvider();
+  }, [checkProvider]);
+
+  if (providerStatus === 'checking') {
+    return (
+      <div className='flex h-full items-center justify-center p-4'>
+        <Loader2Icon className='text-primary size-6 animate-spin' />
+      </div>
+    );
+  }
+
+  if (providerStatus === 'unavailable') {
+    return (
+      <div className='flex h-full flex-col items-center justify-center gap-3 p-4 text-center'>
+        <p className='text-foreground text-sm font-medium'>AI chat is unavailable</p>
+        <p className='text-muted-foreground max-w-xs text-xs'>
+          Error connecting to your configured AI provider. Open{' '}
+          <button type='button' className='text-primary underline' onClick={openAISettings}>
+            AI Assistant settings
+          </button>{' '}
+          to verify that everything is configured correctly and the provider is running.
+        </p>
+        <Button size='sm' className='h-8 text-xs' onClick={() => void checkProvider()}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  return <AIAssistantRuntimeContent {...props} />;
 };
 
 const ThreadWrapper = ({
