@@ -11,6 +11,7 @@ allowBuilds:
   edgedriver: true
   esbuild: true
   geckodriver: true
+  onnxruntime-node: true
   protobufjs: true
   sharp: true
   workerd: true
