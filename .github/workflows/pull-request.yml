@@ -167,7 +167,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y binaryen
           cargo install wasm-bindgen-cli --version 0.2.100 --locked
-          git clone --depth 1 https://github.com/BYVoid/OpenCC.git packages/simplecc-wasm/OpenCC
+          git clone --depth 1 --branch master https://github.com/BYVoid/OpenCC.git packages/simplecc-wasm/OpenCC
           pnpm --dir packages/simplecc-wasm build
 
       - name: install Dependencies
@@ -412,7 +412,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y binaryen
           cargo install wasm-bindgen-cli --version 0.2.100 --locked
-          git clone --depth 1 https://github.com/BYVoid/OpenCC.git packages/simplecc-wasm/OpenCC
+          git clone --depth 1 --branch master https://github.com/BYVoid/OpenCC.git packages/simplecc-wasm/OpenCC
           pnpm --dir packages/simplecc-wasm build
 
       # The tauri tests run `next dev`, whose Turbopack cache lives in
