@@ -107,11 +107,7 @@ const TTSModelBanner: React.FC<TTSModelBannerProps> = ({ bookKey }) => {
                 })}
               </p>
               <div className='mt-2 flex gap-2'>
-                <button
-                  type='button'
-                  className='btn btn-primary btn-xs'
-                  onClick={handleDownload}
-                >
+                <button type='button' className='btn btn-primary btn-xs' onClick={handleDownload}>
                   {_('Download')}
                 </button>
                 <button type='button' className='btn btn-ghost btn-xs' onClick={handleDismiss}>

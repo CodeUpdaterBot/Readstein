@@ -90,7 +90,10 @@ describe('household assign + import stamp', () => {
   });
 
   it('strips a removed member and leaves the book unassigned when they were the last owner', () => {
-    const onlyAlex = stripMemberFromBook(book({ addedByMemberId: 'alex', memberIds: ['alex'] }), 'alex');
+    const onlyAlex = stripMemberFromBook(
+      book({ addedByMemberId: 'alex', memberIds: ['alex'] }),
+      'alex',
+    );
     expect(onlyAlex.memberIds).toEqual([]);
     expect(onlyAlex.addedByMemberId).toBeUndefined();
     expect(bookIsUnassigned(onlyAlex)).toBe(true);

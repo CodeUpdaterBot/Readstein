@@ -15,14 +15,25 @@ export const HOUSEHOLD_COLORS: readonly HouseholdMemberColor[] = [
 export const MEMBER_FILTER_EVERYONE = 'everyone';
 export const MEMBER_FILTER_UNASSIGNED = 'unassigned';
 
-export type MemberFilterValue = typeof MEMBER_FILTER_EVERYONE | typeof MEMBER_FILTER_UNASSIGNED | string;
+export type MemberFilterValue =
+  | typeof MEMBER_FILTER_EVERYONE
+  | typeof MEMBER_FILTER_UNASSIGNED
+  | string;
 
 export const HOUSEHOLD_COLOR_CLASSES: Record<
   HouseholdMemberColor,
   { bg: string; text: string; ring: string }
 > = {
-  rose: { bg: 'bg-rose-200 dark:bg-rose-900/80', text: 'text-rose-800 dark:text-rose-200', ring: 'ring-rose-300/70' },
-  sky: { bg: 'bg-sky-200 dark:bg-sky-900/80', text: 'text-sky-800 dark:text-sky-200', ring: 'ring-sky-300/70' },
+  rose: {
+    bg: 'bg-rose-200 dark:bg-rose-900/80',
+    text: 'text-rose-800 dark:text-rose-200',
+    ring: 'ring-rose-300/70',
+  },
+  sky: {
+    bg: 'bg-sky-200 dark:bg-sky-900/80',
+    text: 'text-sky-800 dark:text-sky-200',
+    ring: 'ring-sky-300/70',
+  },
   amber: {
     bg: 'bg-amber-200 dark:bg-amber-900/80',
     text: 'text-amber-800 dark:text-amber-200',
@@ -43,7 +54,11 @@ export const HOUSEHOLD_COLOR_CLASSES: Record<
     text: 'text-orange-800 dark:text-orange-200',
     ring: 'ring-orange-300/70',
   },
-  teal: { bg: 'bg-teal-200 dark:bg-teal-900/80', text: 'text-teal-800 dark:text-teal-200', ring: 'ring-teal-300/70' },
+  teal: {
+    bg: 'bg-teal-200 dark:bg-teal-900/80',
+    text: 'text-teal-800 dark:text-teal-200',
+    ring: 'ring-teal-300/70',
+  },
   slate: {
     bg: 'bg-slate-200 dark:bg-slate-800/80',
     text: 'text-slate-800 dark:text-slate-200',
@@ -58,7 +73,9 @@ export const createHouseholdMember = (
 ): HouseholdMember => {
   const used = new Set(existing.map((member) => member.color));
   const nextColor =
-    color ?? HOUSEHOLD_COLORS.find((token) => !used.has(token)) ?? HOUSEHOLD_COLORS[existing.length % HOUSEHOLD_COLORS.length]!;
+    color ??
+    HOUSEHOLD_COLORS.find((token) => !used.has(token)) ??
+    HOUSEHOLD_COLORS[existing.length % HOUSEHOLD_COLORS.length]!;
   return {
     id: crypto.randomUUID(),
     name: name.trim(),
@@ -121,7 +138,8 @@ export const assignMembersToBook = (
   return {
     ...book,
     memberIds: unique,
-    addedByMemberId: addedByMemberId === undefined ? book.addedByMemberId : addedByMemberId || undefined,
+    addedByMemberId:
+      addedByMemberId === undefined ? book.addedByMemberId : addedByMemberId || undefined,
     membersUpdatedAt: now,
     updatedAt: now,
   };
@@ -137,8 +155,9 @@ export const displayMembersForBook = (
     .filter((member): member is HouseholdMember => !!member);
 };
 
-export const householdHasMembers = (household: readonly HouseholdMember[] | undefined | null): boolean =>
-  (household?.length ?? 0) > 0;
+export const householdHasMembers = (
+  household: readonly HouseholdMember[] | undefined | null,
+): boolean => (household?.length ?? 0) > 0;
 
 export type HouseholdBookFields = {
   addedByMemberId?: string;

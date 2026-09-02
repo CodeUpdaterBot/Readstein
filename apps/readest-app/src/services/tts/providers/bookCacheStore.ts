@@ -400,9 +400,11 @@ export class BookTTSCacheStore implements TTSCacheStore {
     } catch (err) {
       console.warn('TTS cache close housekeeping failed', err);
     } finally {
-      await withTimeout(opened.db.close(), CLOSE_HOUSEKEEPING_MS, 'TTS cache close').catch((err) => {
-        console.warn('TTS cache db close failed', err);
-      });
+      await withTimeout(opened.db.close(), CLOSE_HOUSEKEEPING_MS, 'TTS cache close').catch(
+        (err) => {
+          console.warn('TTS cache db close failed', err);
+        },
+      );
       const bookHash = this.#getBookHash();
       if (bookHash) await touchTTSCacheMeta(this.#appService, bookHash).catch(() => {});
     }

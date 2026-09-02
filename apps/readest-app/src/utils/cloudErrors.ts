@@ -12,8 +12,7 @@ export const isInsufficientStorageQuotaError = (error: unknown): boolean =>
  * storage over plan quota. Expected for a large local library; not a crash.
  */
 export const isBenignReadestCloudSyncMessage = (message: string): boolean =>
-  isInsufficientStorageQuotaMessage(message) ||
-  /duplicate key|books_pkey/i.test(message);
+  isInsufficientStorageQuotaMessage(message) || /duplicate key|books_pkey/i.test(message);
 
 export const isBenignReadestCloudSyncError = (error: unknown): boolean =>
   error instanceof Error && isBenignReadestCloudSyncMessage(error.message);

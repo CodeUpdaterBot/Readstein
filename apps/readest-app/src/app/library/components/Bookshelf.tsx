@@ -660,7 +660,11 @@ const Bookshelf: React.FC<BookshelfProps> = ({
       setLibrary([...libraryBooks]);
       await appService?.saveLibraryBooks(libraryBooks);
       persistLibraryFolders(
-        remapFolderPaths(useSettingsStore.getState().settings.libraryFolders || [], group.name, null),
+        remapFolderPaths(
+          useSettingsStore.getState().settings.libraryFolders || [],
+          group.name,
+          null,
+        ),
       );
     },
     [appService, getGroupId, libraryBooks, persistLibraryFolders, remapGroupPaths, setLibrary],

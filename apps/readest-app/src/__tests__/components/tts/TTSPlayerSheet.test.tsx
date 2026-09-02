@@ -50,7 +50,14 @@ vi.mock('@/store/readerStore', () => ({
   }),
 }));
 
-const settings = { globalViewSettings: { ttsRate: 1.0, ttsSentenceGap: 0.15, ttsEngine: 'auto', ttsModelSize: 'small' } };
+const settings = {
+  globalViewSettings: {
+    ttsRate: 1.0,
+    ttsSentenceGap: 0.15,
+    ttsEngine: 'auto',
+    ttsModelSize: 'small',
+  },
+};
 const saveSettings = vi.fn();
 const settingsState = { settings, setSettings: vi.fn(), saveSettings };
 vi.mock('@/store/settingsStore', () => ({

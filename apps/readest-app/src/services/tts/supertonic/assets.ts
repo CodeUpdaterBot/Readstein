@@ -1,6 +1,5 @@
 /** Official Supertonic 3 ONNX + voice styles on Hugging Face. */
-export const SUPERTONIC_HF_BASE =
-  'https://huggingface.co/Supertone/supertonic-3/resolve/main';
+export const SUPERTONIC_HF_BASE = 'https://huggingface.co/Supertone/supertonic-3/resolve/main';
 
 export const SUPERTONIC_VOICE_IDS = [
   'M1',

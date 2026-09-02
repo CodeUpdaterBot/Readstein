@@ -186,7 +186,7 @@ export const transformBookFromDB = (dbBook: DBBook): Book => {
     coverHash: cover_hash ?? null,
     coverUpdatedAt: cover_updated_at ? new Date(cover_updated_at).getTime() : null,
     sourceTitle: source_title,
-    metadata: unpacked.metadata,
+    metadata: unpacked.metadata ?? undefined,
     metadataUpdatedAt: metadata_updated_at ? new Date(metadata_updated_at).getTime() : null,
     createdAt: new Date(created_at!).getTime(),
     updatedAt: new Date(updated_at!).getTime(),

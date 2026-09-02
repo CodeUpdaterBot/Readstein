@@ -83,7 +83,12 @@ const TTSListenButton: React.FC<TTSListenButtonProps> = ({
       const doc = content.doc as Document | undefined;
       if (!doc || content.index == null) continue;
       const sel = doc.getSelection();
-      if (sel && sel.rangeCount > 0 && !sel.isCollapsed && (sel.toString().trim().length ?? 0) > 0) {
+      if (
+        sel &&
+        sel.rangeCount > 0 &&
+        !sel.isCollapsed &&
+        (sel.toString().trim().length ?? 0) > 0
+      ) {
         range = sel.getRangeAt(0).cloneRange();
         index = content.index;
         break;
@@ -165,11 +170,7 @@ const TTSListenButton: React.FC<TTSListenButtonProps> = ({
           aria-label={_('Listen')}
           title={_('Listen')}
           aria-expanded={false}
-          className={clsx(
-            chipClass,
-            'rounded-full shadow-lg',
-            'border-base-200/80 border',
-          )}
+          className={clsx(chipClass, 'rounded-full shadow-lg', 'border-base-200/80 border')}
         >
           <MdMic size={iconSize} aria-hidden />
         </button>

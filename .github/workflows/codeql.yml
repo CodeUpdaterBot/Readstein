@@ -12,12 +12,9 @@
 name: 'CodeQL Advanced'
 
 on:
-  push:
-    branches: ['main']
-  pull_request:
-    branches: ['main']
-  schedule:
-    - cron: '38 20 * * 4'
+  # GitHub code scanning is not enabled for this private repository, so SARIF
+  # uploads fail after analysis. Keep manual execution for future activation.
+  workflow_dispatch:
 
 permissions: read-all
 

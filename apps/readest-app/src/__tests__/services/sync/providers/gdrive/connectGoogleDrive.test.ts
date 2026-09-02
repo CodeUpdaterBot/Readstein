@@ -41,7 +41,10 @@ describe('connectGoogleDrive', () => {
       runOAuth,
     });
 
-    expect(runOAuth).toHaveBeenCalledWith(buildGoogleOAuthConfig('cid', DRIVE_CONNECT_SCOPE), fetchFn);
+    expect(runOAuth).toHaveBeenCalledWith(
+      buildGoogleOAuthConfig('cid', DRIVE_CONNECT_SCOPE),
+      fetchFn,
+    );
     expect(persistence.save).toHaveBeenCalledWith(tokens);
     expect(res.accountLabel).toBe('a@b.com');
   });

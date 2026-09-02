@@ -7,7 +7,13 @@ import {
   isSupertonicVoiceId,
   supertonicAssetUrl,
 } from './assets';
-import { createTextToSpeech, encodeWav, loadVoiceStyle, type Style, type TextToSpeech } from './helper';
+import {
+  createTextToSpeech,
+  encodeWav,
+  loadVoiceStyle,
+  type Style,
+  type TextToSpeech,
+} from './helper';
 import type { SupertonicWorkerRequest, SupertonicWorkerResponse } from './protocol';
 
 let tts: TextToSpeech | null = null;
@@ -48,7 +54,12 @@ const downloadAssets = async (id: number): Promise<Record<string, string>> => {
       const reader = response.body?.getReader();
       if (!reader) {
         const buffer = await response.arrayBuffer();
-        await cachePut(cache, remote, buffer, response.headers.get('Content-Type') || 'application/octet-stream');
+        await cachePut(
+          cache,
+          remote,
+          buffer,
+          response.headers.get('Content-Type') || 'application/octet-stream',
+        );
         blob = new Blob([buffer]);
         loaded += asset.bytes;
         post({ id, type: 'progress', loaded: Math.min(loaded, total), total });

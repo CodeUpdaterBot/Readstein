@@ -32,9 +32,7 @@ const TTSPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterReset }
   const { settings, setSettings, saveSettings } = useSettingsStore();
   const viewSettings = getViewSettings(bookKey) || settings.globalViewSettings;
 
-  const [ttsEngine, setTtsEngine] = useState<TTSEnginePreference>(
-    viewSettings.ttsEngine ?? 'auto',
-  );
+  const [ttsEngine, setTtsEngine] = useState<TTSEnginePreference>(viewSettings.ttsEngine ?? 'auto');
   const [ttsModelSize, setTtsModelSize] = useState<TTSModelSize>(
     viewSettings.ttsModelSize ?? 'small',
   );
@@ -223,10 +221,7 @@ const TTSPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterReset }
           />
         </SettingsRow>
         {showModelSize && (
-          <SettingsRow
-            label={_('On-device Model')}
-            data-setting-id='settings.tts.ttsModelSize'
-          >
+          <SettingsRow label={_('On-device Model')} data-setting-id='settings.tts.ttsModelSize'>
             <SettingsSelect
               value={resolveOnDeviceModel(ttsModelSize).id}
               onChange={(event) => setTtsModelSize(event.target.value as TTSModelSize)}
@@ -242,10 +237,7 @@ const TTSPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterReset }
           </SettingsRow>
         )}
         {showModelSize && !isAndroidSherpaPlatform() && (
-          <SettingsRow
-            label={_('Acceleration')}
-            data-setting-id='settings.tts.acceleration'
-          >
+          <SettingsRow label={_('Acceleration')} data-setting-id='settings.tts.acceleration'>
             <span className='text-base-content/70 max-w-[16rem] truncate text-right text-sm'>
               {accelerationLabel}
             </span>

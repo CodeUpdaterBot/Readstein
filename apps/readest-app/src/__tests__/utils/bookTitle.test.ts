@@ -33,9 +33,9 @@ describe('bookTitle', () => {
     expect(
       preferFilenameOverMetadata('Twyman', 'GENUFLECT Secret Statues of the Templars', 'PDF'),
     ).toBe(true);
-    expect(preferFilenameOverMetadata('The Conquest of the World', 'The Conquest of the World', 'EPUB')).toBe(
-      false,
-    );
+    expect(
+      preferFilenameOverMetadata('The Conquest of the World', 'The Conquest of the World', 'EPUB'),
+    ).toBe(false);
   });
 
   it('resolves import titles from the original filename, not the cache path', () => {

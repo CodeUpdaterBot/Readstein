@@ -112,10 +112,7 @@ export const snapshotGpuAdapter = async (gpu?: GpuLike | null): Promise<GpuAdapt
  * or q4f16 — q4/q8 on WebGPU are slow or produce garbage. WASM keeps the
  * user's Tiny/Small/Large quantized files.
  */
-export const buildLoadAttempts = (
-  size: TTSModelSize,
-  gpu: GpuAdapterSnapshot,
-): LoadAttempt[] => {
+export const buildLoadAttempts = (size: TTSModelSize, gpu: GpuAdapterSnapshot): LoadAttempt[] => {
   const gpuAttempts: LoadAttempt[] =
     size === 'tiny'
       ? [

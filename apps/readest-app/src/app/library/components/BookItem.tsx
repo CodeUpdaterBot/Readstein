@@ -159,7 +159,9 @@ const BookItem: React.FC<BookItemProps> = ({
         )}
         {householdHasMembers(settings.householdMembers) && (
           <div className='absolute end-1 top-1'>
-            <HouseholdMemberBadge members={displayMembersForBook(book, settings.householdMembers ?? [])} />
+            <HouseholdMemberBadge
+              members={displayMembersForBook(book, settings.householdMembers ?? [])}
+            />
           </div>
         )}
         {isSelectMode && (

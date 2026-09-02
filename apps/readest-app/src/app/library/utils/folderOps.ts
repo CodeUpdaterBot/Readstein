@@ -14,7 +14,10 @@ export const folderParentPath = (fullPath: string): string => {
 
 /** Reject path separators so a rename cannot accidentally nest. */
 export const sanitizeFolderSegment = (name: string): string =>
-  name.replaceAll(/[/\\]+/g, ' ').replaceAll(/\s+/g, ' ').trim();
+  name
+    .replaceAll(/[/\\]+/g, ' ')
+    .replaceAll(/\s+/g, ' ')
+    .trim();
 
 export const joinFolderPath = (parent: string, segment: string): string => {
   const leaf = sanitizeFolderSegment(segment);

@@ -4,7 +4,9 @@ import { parseDriveShareUrl } from '@/services/sync/providers/gdrive/parseDriveS
 describe('parseDriveShareUrl', () => {
   test('parses folder share links', () => {
     expect(
-      parseDriveShareUrl('https://drive.google.com/drive/folders/1abcDEF_ghi-0123456789?usp=sharing'),
+      parseDriveShareUrl(
+        'https://drive.google.com/drive/folders/1abcDEF_ghi-0123456789?usp=sharing',
+      ),
     ).toEqual({ type: 'folder', id: '1abcDEF_ghi-0123456789' });
     expect(
       parseDriveShareUrl('https://drive.google.com/drive/u/0/folders/1abcDEF_ghi-0123456789'),

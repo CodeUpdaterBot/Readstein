@@ -450,9 +450,9 @@ describe('quota failure handling', () => {
     transferManager.queueBatchUploads(books);
     await flushAsync(10000);
 
-    const notices = vi.mocked(eventDispatcher.dispatch).mock.calls.filter(
-      ([event]) => event === 'storage-quota-notice',
-    );
+    const notices = vi
+      .mocked(eventDispatcher.dispatch)
+      .mock.calls.filter(([event]) => event === 'storage-quota-notice');
     expect(notices).toHaveLength(1);
     expect(notices[0]![1]).toEqual({ count: 3 });
 
@@ -477,9 +477,9 @@ describe('quota failure handling', () => {
     transferManager.queueUpload(book);
     await flushAsync(10000);
 
-    const notices = vi.mocked(eventDispatcher.dispatch).mock.calls.filter(
-      ([event]) => event === 'storage-quota-notice',
-    );
+    const notices = vi
+      .mocked(eventDispatcher.dispatch)
+      .mock.calls.filter(([event]) => event === 'storage-quota-notice');
     expect(notices).toHaveLength(0);
   });
 

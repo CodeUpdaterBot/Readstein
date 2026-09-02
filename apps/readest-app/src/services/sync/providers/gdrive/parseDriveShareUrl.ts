@@ -42,7 +42,8 @@ export const parseDriveShareUrl = (input: string): DriveShareTarget | null => {
 
     const openId = takeId(url.searchParams.get('id'));
     if (openId) {
-      const looksLikeFolder = /\/folders\//i.test(path) || url.searchParams.get('usp') === 'sharing';
+      const looksLikeFolder =
+        /\/folders\//i.test(path) || url.searchParams.get('usp') === 'sharing';
       // `/open?id=` and `/uc?id=` are files unless the path already said folders.
       if (/\/folders\//i.test(path)) return { type: 'folder', id: openId };
       if (looksLikeFolder && /folder/i.test(url.href)) return { type: 'folder', id: openId };

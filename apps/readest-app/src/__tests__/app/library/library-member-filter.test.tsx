@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const navigateToLibrary = vi.fn();
-const saveSysSettings = vi.fn(async () => {});
+const saveSysSettings = vi.fn<(...args: unknown[]) => Promise<void>>(async () => {});
 const setSettingsDialogOpen = vi.fn();
 const setRequestedPanel = vi.fn();
 const setActiveSettingsItemId = vi.fn();

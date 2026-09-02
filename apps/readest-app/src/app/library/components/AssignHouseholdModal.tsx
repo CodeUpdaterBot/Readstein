@@ -91,7 +91,11 @@ const AssignHouseholdModal: React.FC<AssignHouseholdModalProps> = ({
             })}
           </ul>
           <div className='mt-6 flex justify-end gap-3'>
-            <button type='button' className='hover:bg-base-200 rounded-md px-4 py-2' onClick={onCancel}>
+            <button
+              type='button'
+              className='hover:bg-base-200 rounded-md px-4 py-2'
+              onClick={onCancel}
+            >
               {_('Cancel')}
             </button>
             <button

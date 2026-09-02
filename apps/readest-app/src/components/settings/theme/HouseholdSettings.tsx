@@ -59,11 +59,15 @@ const HouseholdSettings: React.FC<HouseholdSettingsProps> = ({
   const handleRename = async (id: string, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    await persistMembers(members.map((member) => (member.id === id ? { ...member, name: trimmed } : member)));
+    await persistMembers(
+      members.map((member) => (member.id === id ? { ...member, name: trimmed } : member)),
+    );
   };
 
   const handleColor = async (id: string, color: HouseholdMemberColor) => {
-    await persistMembers(members.map((member) => (member.id === id ? { ...member, color } : member)));
+    await persistMembers(
+      members.map((member) => (member.id === id ? { ...member, color } : member)),
+    );
   };
 
   const handleRemove = async (id: string) => {
@@ -181,7 +185,9 @@ const HouseholdSettings: React.FC<HouseholdSettingsProps> = ({
         <div className='px-4 pb-4'>
           <Tips>
             <li>
-              {_('Add names, then new imports attach to the selected person. Filter the shelf with the pills under the header.')}
+              {_(
+                'Add names, then new imports attach to the selected person. Filter the shelf with the pills under the header.',
+              )}
             </li>
           </Tips>
         </div>

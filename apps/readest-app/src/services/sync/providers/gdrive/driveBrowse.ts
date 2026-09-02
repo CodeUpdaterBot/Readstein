@@ -8,7 +8,13 @@
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
 import { FileSyncError } from '@/services/sync/file/provider';
-import { browseListUrl, childrenQuery, FOLDER_MIME, mediaDownloadUrl, metadataUrl } from './driveRest';
+import {
+  browseListUrl,
+  childrenQuery,
+  FOLDER_MIME,
+  mediaDownloadUrl,
+  metadataUrl,
+} from './driveRest';
 import { createGoogleDriveAuth } from './googleDriveAuth';
 import { WebDriveAuth } from './WebDriveAuth';
 import { createDriveTokenPersistence } from './driveTokenStore';
@@ -135,7 +141,9 @@ export const getDriveFileMeta = async (
 
 export const driveDownloadUrl = (fileId: string): string => mediaDownloadUrl(fileId);
 
-export const driveAuthHeader = async (session: { auth: DriveAuth }): Promise<Record<string, string>> => {
+export const driveAuthHeader = async (session: {
+  auth: DriveAuth;
+}): Promise<Record<string, string>> => {
   const token = await session.auth.getAccessToken();
   return { Authorization: `Bearer ${token}` };
 };

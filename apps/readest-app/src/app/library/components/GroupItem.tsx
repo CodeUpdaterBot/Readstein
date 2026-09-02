@@ -1,6 +1,12 @@
 import clsx from 'clsx';
 import { useEffect, useRef, useState } from 'react';
-import { MdCheckCircle, MdCheckCircleOutline, MdChevronRight, MdChevronLeft, MdMoreVert } from 'react-icons/md';
+import {
+  MdCheckCircle,
+  MdCheckCircleOutline,
+  MdChevronRight,
+  MdChevronLeft,
+  MdMoreVert,
+} from 'react-icons/md';
 import { HiOutlineFolder } from 'react-icons/hi';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';

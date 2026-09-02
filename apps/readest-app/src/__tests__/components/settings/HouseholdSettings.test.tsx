@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const saveSysSettings = vi.fn(async () => {});
+const saveSysSettings = vi.fn<(...args: unknown[]) => Promise<void>>(async () => {});
 const updateBooks = vi.fn(async () => {});
 
 const settingsState = {
@@ -78,7 +78,9 @@ describe('HouseholdSettings', () => {
   it('shows a first-run tip when no people have been added', () => {
     render(<HouseholdSettings />);
     expect(screen.getByText(/Add names, then new imports/)).toBeTruthy();
-    expect(screen.getByText('One library on this PC. Filter by who added or owns a book.')).toBeTruthy();
+    expect(
+      screen.getByText('One library on this PC. Filter by who added or owns a book.'),
+    ).toBeTruthy();
   });
 
   it('adds a person from the name field', async () => {

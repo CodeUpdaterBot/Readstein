@@ -160,7 +160,9 @@ export function resolveOnDeviceModel(
   return ON_DEVICE_MODELS.find((model) => model.id === fallbackId)!;
 }
 
-export function modelsForPlatform(platform: OnDevicePlatform = currentOnDevicePlatform()): OnDeviceModel[] {
+export function modelsForPlatform(
+  platform: OnDevicePlatform = currentOnDevicePlatform(),
+): OnDeviceModel[] {
   return ON_DEVICE_MODELS.filter((model) => model.platforms.includes(platform)).sort(
     (a, b) => a.paramsM - b.paramsM || a.sizeMB - b.sizeMB || a.name.localeCompare(b.name),
   );

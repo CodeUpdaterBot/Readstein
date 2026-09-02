@@ -7,10 +7,7 @@ const TICKS_PER_SECOND = 10_000_000;
  * Used when Kokoro (or any engine) does not emit real timings so word
  * highlighting and the scrubber still track roughly.
  */
-export const estimateWordBoundaries = (
-  text: string,
-  durationSec: number,
-): TTSWordBoundary[] => {
+export const estimateWordBoundaries = (text: string, durationSec: number): TTSWordBoundary[] => {
   const words = text.match(/\S+/g);
   if (!words || words.length === 0 || durationSec <= 0) return [];
 
