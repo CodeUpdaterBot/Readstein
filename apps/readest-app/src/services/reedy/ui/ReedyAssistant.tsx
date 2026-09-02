@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppService } from '@/types/system';
 import type { BookDoc } from '@/libs/document';
 import type { AISettings } from '@/services/ai/types';
+import { getAIProvider } from '@/services/ai/providers';
 import { AgentRuntime } from '../runtime/AgentRuntime';
 import { BookIndexer } from '../retrieval/BookIndexer';
 import { BookRetriever } from '../retrieval/BookRetriever';
@@ -265,6 +266,7 @@ export function ReedyAssistant({
 
   // Indexing state — tracked locally to avoid layering yet another store.
   const [indexingPhase, setIndexingPhase] = useState<IndexingPhase>('idle');
+  const [indexError, setIndexError] = useState<string | null>(null);
   const [indexProgress, setIndexProgress] = useState<{
     pct: number;
     current: number;
@@ -295,7 +297,15 @@ export function ReedyAssistant({
   const handleIndex = useCallback(async () => {
     if (!reedy) return;
     setIndexingPhase('indexing');
+    setIndexError(null);
     try {
+      if (!(await getAIProvider(aiSettings).isAvailable())) {
+        setIndexError(
+          'Error connecting to your configured AI provider. Open AI Assistant settings to verify that everything is configured correctly and the provider is running.',
+        );
+        setIndexingPhase('failed');
+        return;
+      }
       await reedy.indexer.indexBook(bookDoc, bookHash, models.embedding, {
         onProgress: (e) => {
           if (e.phase === 'embedding' && e.total > 0) {
@@ -317,6 +327,9 @@ export function ReedyAssistant({
       );
     } catch (err) {
       console.error('[Reedy] index failed', err);
+      setIndexError(
+        'Error connecting to your configured AI provider. Open AI Assistant settings to verify that everything is configured correctly and the provider is running.',
+      );
       setIndexingPhase('failed');
     } finally {
       setIndexProgress(null);
@@ -360,6 +373,7 @@ export function ReedyAssistant({
     return (
       <IndexingStatus
         status={indexingPhase}
+        errorMessage={indexError ?? undefined}
         progressPercent={indexProgress?.pct}
         chunkProgress={
           indexProgress ? { current: indexProgress.current, total: indexProgress.total } : undefined

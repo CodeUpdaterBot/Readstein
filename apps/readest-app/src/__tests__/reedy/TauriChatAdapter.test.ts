@@ -74,6 +74,7 @@ interface RunCall {
   messages: Array<{ role: string; content: string }>;
   tools?: Record<string, unknown>;
   stopWhen?: unknown;
+  providerOptions?: unknown;
   abortSignal?: AbortSignal;
 }
 
@@ -102,7 +103,7 @@ describe('TauriChatAdapter wiring (M1.11)', () => {
     const sourceStore = new ReedySourceStore();
     const backend = fakeReedy();
     const adapter = createTauriAdapter(() => ({
-      settings: baseSettings,
+      settings: { ...baseSettings, provider: 'openrouter', openrouterApiKey: 'test-key' },
       bookHash: 'bk1',
       bookTitle: 'Title',
       authorName: 'Author',
@@ -123,6 +124,7 @@ describe('TauriChatAdapter wiring (M1.11)', () => {
     expect(call.tools).toBeDefined();
     expect(call.tools!['lookupPassage']).toBeDefined();
     expect(call.stopWhen).toEqual({ __stepCountIs: 3 });
+    expect(call.providerOptions).toEqual({ openrouter: { reasoningEffort: 'medium' } });
     expect(call.system).toMatch(/lookupPassage/);
     expect(call.system).toMatch(/<retrieved/);
     expect(backend.buildLookupTool).toHaveBeenCalledWith(

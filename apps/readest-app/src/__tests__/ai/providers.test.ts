@@ -191,7 +191,7 @@ describe('OpenRouterProvider', () => {
     const provider = new OpenRouterProvider(settings);
 
     expect(provider.id).toBe('openrouter');
-    expect(provider.name).toBe('OpenRouter (Custom)');
+    expect(provider.name).toBe('OpenAI Compatible');
     expect(provider.requiresAuth).toBe(true);
   });
 

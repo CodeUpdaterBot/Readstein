@@ -30,9 +30,9 @@ export const DEFAULT_AI_SETTINGS: AISettings = {
   aiGatewayModel: 'google/gemini-2.5-flash-lite',
   aiGatewayEmbeddingModel: 'openai/text-embedding-3-small',
 
-  openrouterBaseUrl: 'https://openrouter.ai/api/v1',
-  openrouterModel: '',
-  openrouterEmbeddingModel: '',
+  openrouterBaseUrl: 'https://api.openai.com/v1',
+  openrouterModel: 'gpt-5.6-luna',
+  openrouterEmbeddingModel: 'text-embedding-3-small',
 
   spoilerProtection: false,
   maxContextChunks: 10,

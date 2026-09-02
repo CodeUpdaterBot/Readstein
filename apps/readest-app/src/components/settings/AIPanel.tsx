@@ -91,11 +91,22 @@ const AIPanel: React.FC = () => {
   // ---- OpenRouter (OpenAI-compatible) state ----
   const [openrouterKey, setOpenrouterKey] = useState(aiSettings.openrouterApiKey ?? '');
   const [openrouterUrl, setOpenrouterUrl] = useState(
-    aiSettings.openrouterBaseUrl ?? DEFAULT_AI_SETTINGS.openrouterBaseUrl ?? '',
+    !aiSettings.openrouterBaseUrl || aiSettings.openrouterBaseUrl === 'https://openrouter.ai/api/v1'
+      ? DEFAULT_AI_SETTINGS.openrouterBaseUrl || ''
+      : aiSettings.openrouterBaseUrl,
   );
-  const [openrouterModel, setOpenrouterModel] = useState(aiSettings.openrouterModel ?? '');
+  const [openrouterModel, setOpenrouterModel] = useState(
+    !aiSettings.openrouterModel ||
+      aiSettings.openrouterModel === 'openai/gpt-4o-mini' ||
+      aiSettings.openrouterModel === 'gpt-4o-mini'
+      ? DEFAULT_AI_SETTINGS.openrouterModel || ''
+      : aiSettings.openrouterModel,
+  );
   const [openrouterEmbeddingModel, setOpenrouterEmbeddingModel] = useState(
-    aiSettings.openrouterEmbeddingModel ?? '',
+    !aiSettings.openrouterEmbeddingModel ||
+      aiSettings.openrouterEmbeddingModel === 'openai/text-embedding-3-small'
+      ? DEFAULT_AI_SETTINGS.openrouterEmbeddingModel || ''
+      : aiSettings.openrouterEmbeddingModel,
   );
   const [openrouterModels, setOpenrouterModels] = useState<OpenRouterModelInfo[]>([]);
   const [openrouterFetchingModels, setOpenrouterFetchingModels] = useState(false);
@@ -643,7 +654,7 @@ const AIPanel: React.FC = () => {
             <div className='flex w-full items-center justify-between'>
               <SettingLabel>{_('API Key')}</SettingLabel>
               <a
-                href='https://openrouter.ai/keys'
+                href='https://platform.openai.com/api-keys'
                 target='_blank'
                 rel='noopener noreferrer'
                 className={clsx('link text-xs', !enabled && 'pointer-events-none')}
@@ -656,7 +667,7 @@ const AIPanel: React.FC = () => {
               className='input input-bordered input-sm w-full'
               value={openrouterKey}
               onChange={(e) => setOpenrouterKey(e.target.value)}
-              placeholder='sk-or-...'
+              placeholder='sk-...'
               disabled={!enabled}
               autoComplete='off'
             />
@@ -685,7 +696,7 @@ const AIPanel: React.FC = () => {
               className='input input-bordered input-sm w-full'
               value={openrouterUrl}
               onChange={(e) => setOpenrouterUrl(e.target.value)}
-              placeholder='https://openrouter.ai/api/v1'
+              placeholder='https://api.openai.com/v1'
               disabled={!enabled}
             />
           </div>
@@ -714,7 +725,7 @@ const AIPanel: React.FC = () => {
                 className='input input-bordered input-sm w-full'
                 value={openrouterModel}
                 onChange={(e) => setOpenrouterModel(e.target.value)}
-                placeholder='openai/gpt-4o-mini'
+                placeholder='gpt-5.6-luna'
                 disabled={!enabled}
               />
             )}
@@ -755,7 +766,7 @@ const AIPanel: React.FC = () => {
                 className='input input-bordered input-sm w-full'
                 value={openrouterEmbeddingModel}
                 onChange={(e) => setOpenrouterEmbeddingModel(e.target.value)}
-                placeholder='openai/text-embedding-3-small'
+                placeholder='text-embedding-3-small'
                 disabled={!enabled}
               />
             )}
