@@ -6,13 +6,7 @@ import { parseWebViewInfo } from '@/utils/ua';
 import { getAppVersion } from '@/utils/version';
 import { writeTextToClipboard } from '@/utils/clipboard';
 import { eventDispatcher } from '@/utils/event';
-import {
-  FORK_AUTHOR,
-  FORK_AUTHOR_SITE,
-  FORK_GITHUB,
-  FORK_NAME,
-  UPSTREAM_GITHUB,
-} from '@/utils/fork';
+import { FORK_AUTHOR, FORK_AUTHOR_SITE, FORK_GITHUB, UPSTREAM_GITHUB } from '@/utils/fork';
 import SupportLinks from './SupportLinks';
 import LegalLinks from './LegalLinks';
 import Dialog from './Dialog';
@@ -77,18 +71,18 @@ export const AboutWindow = () => {
     <Dialog
       id='about_window'
       isOpen={isOpen}
-      title={_('About Readest Unlimited')}
+      title={_('About Readstein')}
       onClose={handleClose}
       boxClassName='sm:!w-[480px] sm:!max-w-screen-sm sm:h-auto'
     >
       {isOpen && (
-        <div className='about-content flex flex-col items-center justify-center gap-3 pb-8 sm:pb-0'>
-          <div className='flex flex-1 flex-col items-center justify-end gap-1.5 px-6 py-1'>
-            <div className='mb-1 mt-4'>
-              <Image src='/icon.png' alt='App Logo' className='h-16 w-16' width={64} height={64} />
+        <div className='about-content flex flex-col items-center justify-center gap-2 pb-8 sm:pb-0'>
+          <div className='flex flex-1 flex-col items-center justify-end gap-1 px-6 pb-1 pt-3'>
+            <div className='-translate-y-2.5'>
+              <Image src='/icon.png' alt='App Logo' className='h-20 w-20' width={80} height={80} />
             </div>
             <div className='flex select-text flex-col items-center'>
-              <h2 className='text-2xl font-bold'>{FORK_NAME}</h2>
+              <h2 className='text-2xl font-bold'>{_("It's Readest, Unlimited")}</h2>
               <p className='text-neutral-content mt-0.5 text-xs'>
                 {_('a fork of Readest, by')}{' '}
                 <Link href={FORK_AUTHOR_SITE} className='text-blue-500 underline'>

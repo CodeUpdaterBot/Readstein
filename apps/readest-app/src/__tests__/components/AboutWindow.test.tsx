@@ -129,7 +129,7 @@ describe('AboutWindow version label', () => {
   it('presents the fork name and does not offer official updates', async () => {
     await openDialog();
 
-    expect(screen.getByText('Readest Unlimited')).toBeTruthy();
+    expect(screen.getByText("It's Readest, Unlimited")).toBeTruthy();
     expect(screen.getByText('a fork of Readest, by')).toBeTruthy();
     expect(screen.getByText('SteStein')).toBeTruthy();
     expect(screen.getByText(/New source:/)).toBeTruthy();
