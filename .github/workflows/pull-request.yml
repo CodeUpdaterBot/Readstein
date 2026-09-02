@@ -154,6 +154,23 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      # SimpleCC is a local Rust/WASM workspace package. Its generated
+      # bindings are intentionally ignored, so a clean runner must build them
+      # before the app's @simplecc path alias can type-check.
+      - name: setup Rust for SimpleCC WASM
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+      - name: build SimpleCC WASM vendor
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binaryen
+          cargo install wasm-bindgen-cli --version 0.2.100 --locked
+          git clone --depth 1 https://github.com/BYVoid/OpenCC.git packages/simplecc-wasm/OpenCC
+          pnpm --dir packages/simplecc-wasm --ignore-workspace install --frozen-lockfile
+          pnpm --dir packages/simplecc-wasm build
+
       - name: install Dependencies
         working-directory: apps/readest-app
         run: |
