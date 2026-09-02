@@ -76,9 +76,9 @@ describe('folderOps', () => {
   });
 
   it('remaps persisted empty-folder paths', () => {
-    expect(remapFolderPaths(['Books', 'Books/Twyman', 'Other'], 'Books/Twyman', 'Books/Jim')).toEqual(
-      ['Books', 'Books/Jim', 'Other'],
-    );
+    expect(
+      remapFolderPaths(['Books', 'Books/Twyman', 'Other'], 'Books/Twyman', 'Books/Jim'),
+    ).toEqual(['Books', 'Books/Jim', 'Other']);
     expect(remapFolderPaths(['Books', 'Books/Twyman'], 'Books/Twyman', null)).toEqual(['Books']);
     expect(remapFolderPaths(['Books', 'Books/Twyman'], 'Books', null)).toEqual(['Twyman']);
   });

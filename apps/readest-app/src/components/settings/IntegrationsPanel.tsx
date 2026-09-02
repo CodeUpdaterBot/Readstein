@@ -135,8 +135,7 @@ const IntegrationsPanel: React.FC = () => {
   const { userProfilePlan } = useQuotaStats();
   const isCloudSyncPremium = isCloudSyncAllowed(userProfilePlan ?? 'free');
   const premiumBadge =
-    CLOUD_SYNC_REQUIRES_PREMIUM &&
-    (!user || (userProfilePlan !== undefined && !isCloudSyncPremium))
+    CLOUD_SYNC_REQUIRES_PREMIUM && (!user || (userProfilePlan !== undefined && !isCloudSyncPremium))
       ? _('Premium')
       : undefined;
 

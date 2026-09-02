@@ -19,7 +19,8 @@ import { expandRangeOverRuby } from '@/utils/ruby';
 import { WebSpeechClient } from './WebSpeechClient';
 import { NativeTTSClient } from './NativeTTSClient';
 import { EdgeTTSClient } from './EdgeTTSClient';
-import type { KokoroTTSClient } from './kokoro/KokoroTTSClient';
+import { KokoroTTSClient } from './kokoro/KokoroTTSClient';
+import { DEFAULT_PARAGRAPH_GAP_SEC } from './gaps';
 import { kokoroModelStore } from './kokoro/modelStore';
 import { isOnDeviceLanguageSupported } from './onDeviceCatalog';
 import { SectionTimeline, TimelineSentence } from './SectionTimeline';
@@ -98,7 +99,7 @@ export interface TTSViewBindings {
 // is engine-agnostic, handled entirely in #speak()/forward() below. There is
 // no natural pause here otherwise -- the transition is as fast as the async
 // stop/init overhead allows, which reads as no pause at all.
-export const DEFAULT_PARAGRAPH_GAP_SEC = 0.3;
+export { DEFAULT_PARAGRAPH_GAP_SEC } from './gaps';
 
 export class TTSController extends EventTarget {
   // PlaybackSource tag: the media bridge and the session manager consume this
@@ -202,10 +203,6 @@ export class TTSController extends EventTarget {
     super();
     this.ttsWebClient = new WebSpeechClient(this);
     this.ttsEdgeClient = new EdgeTTSClient(this, appService);
-    // Lazy require breaks constants → Edge → Buffered → TTSController → Kokoro →
-    // Buffered circular init (Kokoro would otherwise extend an unfinished class).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { KokoroTTSClient } = require('./kokoro/KokoroTTSClient') as typeof import('./kokoro/KokoroTTSClient');
     this.ttsKokoroClient = new KokoroTTSClient(this, appService);
     // Native TTS is backed by Android TextToSpeech and iOS AVSpeechSynthesizer.
     // TODO: implement native TTS client for desktop platforms.
@@ -399,9 +396,7 @@ export class TTSController extends EventTarget {
     // where WASM Kokoro is unusable and system TTS is often Qualcomm garbage.
     // Desktop Auto uses Kokoro only if the model is already on disk.
     if (preference === 'kokoro' || (preference === 'auto' && kokoroEligible)) {
-      this.ttsKokoroClient.setForceLoad(
-        preference === 'kokoro' || !!this.appService?.isAndroidApp,
-      );
+      this.ttsKokoroClient.setForceLoad(preference === 'kokoro' || !!this.appService?.isAndroidApp);
       if (await this.ttsKokoroClient.init()) {
         availableClients.push(this.ttsKokoroClient);
       }

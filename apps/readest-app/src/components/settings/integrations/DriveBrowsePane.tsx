@@ -1,13 +1,6 @@
 import clsx from 'clsx';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  MdArrowBack,
-  MdCheck,
-  MdDownload,
-  MdFolder,
-  MdLink,
-  MdRefresh,
-} from 'react-icons/md';
+import { MdArrowBack, MdCheck, MdDownload, MdFolder, MdLink, MdRefresh } from 'react-icons/md';
 import { useEnv } from '@/context/EnvContext';
 import { useAuth } from '@/context/AuthContext';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -27,11 +20,7 @@ import {
   type DriveBrowseEntry,
 } from '@/services/sync/providers/gdrive/driveBrowse';
 import { parseDriveShareUrl } from '@/services/sync/providers/gdrive/parseDriveShareUrl';
-import {
-  formatLastModified,
-  formatSize,
-  isSupportedBookExt,
-} from './webdavBrowseUtils';
+import { formatLastModified, formatSize, isSupportedBookExt } from './webdavBrowseUtils';
 import { SettingLabel } from '../primitives';
 
 const ROOT_ID = 'root';
@@ -62,28 +51,31 @@ const DriveBrowsePane: React.FC = () => {
 
   const library = useLibraryStore((s) => s.library);
 
-  const loadFolder = useCallback(async (id: string) => {
-    setIsLoading(true);
-    setLoadError(null);
-    try {
-      const session = await createDriveBrowseSession();
-      if (!session) throw new Error('Google Drive is not available here');
-      const listed = await listDriveFolder(session, id);
-      setEntries(listed);
-    } catch (e) {
-      const auth = e instanceof FileSyncError && e.code === 'AUTH_FAILED';
-      setLoadError(
-        auth
-          ? _('Reconnect Google Drive to browse your folders.')
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      );
-      setEntries([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [_]);
+  const loadFolder = useCallback(
+    async (id: string) => {
+      setIsLoading(true);
+      setLoadError(null);
+      try {
+        const session = await createDriveBrowseSession();
+        if (!session) throw new Error('Google Drive is not available here');
+        const listed = await listDriveFolder(session, id);
+        setEntries(listed);
+      } catch (e) {
+        const auth = e instanceof FileSyncError && e.code === 'AUTH_FAILED';
+        setLoadError(
+          auth
+            ? _('Reconnect Google Drive to browse your folders.')
+            : e instanceof Error
+              ? e.message
+              : String(e),
+        );
+        setEntries([]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [_],
+  );
 
   useEffect(() => {
     void loadFolder(folderId);
@@ -289,7 +281,9 @@ const DriveBrowsePane: React.FC = () => {
                   <button
                     type='button'
                     className='flex min-w-0 flex-1 items-center gap-2 text-left'
-                    onClick={() => (entry.isDirectory ? openFolder(entry) : void importEntry(entry))}
+                    onClick={() =>
+                      entry.isDirectory ? openFolder(entry) : void importEntry(entry)
+                    }
                   >
                     {entry.isDirectory ? (
                       <MdFolder className='text-base-content/60 h-5 w-5 shrink-0' />
@@ -302,7 +296,8 @@ const DriveBrowsePane: React.FC = () => {
                         {[
                           entry.size ? formatSize(entry.size) : '',
                           entry.modifiedTime ? formatLastModified(entry.modifiedTime) : '',
-                          book && alreadyInLibrary.has(entry.name.replace(/\.[^.]+$/, '').toLowerCase())
+                          book &&
+                          alreadyInLibrary.has(entry.name.replace(/\.[^.]+$/, '').toLowerCase())
                             ? _('May already be in library')
                             : '',
                         ]

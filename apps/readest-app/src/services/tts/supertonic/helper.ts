@@ -134,11 +134,11 @@ export class TextToSpeech {
       BigInt64Array.from((textIds[0] ?? []).map((x) => BigInt(x))),
       [1, width],
     );
-    const textMaskTensor = new ort.Tensor(
-      'float32',
-      Float32Array.from(textMask[0]?.[0] ?? []),
-      [1, 1, width],
-    );
+    const textMaskTensor = new ort.Tensor('float32', Float32Array.from(textMask[0]?.[0] ?? []), [
+      1,
+      1,
+      width,
+    ]);
 
     const dpOutputs = await this.dpOrt.run({
       text_ids: textIdsTensor,
@@ -165,11 +165,11 @@ export class TextToSpeech {
 
     for (let step = 0; step < totalStep; step++) {
       const currentStepTensor = new ort.Tensor('float32', Float32Array.from([step]), [1]);
-      const xtTensor = new ort.Tensor(
-        'float32',
-        Float32Array.from(xt.flat(2)),
-        [1, xt[0]!.length, xt[0]![0]!.length],
-      );
+      const xtTensor = new ort.Tensor('float32', Float32Array.from(xt.flat(2)), [
+        1,
+        xt[0]!.length,
+        xt[0]![0]!.length,
+      ]);
       const vectorEstOutputs = await this.vectorEstOrt.run({
         noisy_latent: xtTensor,
         text_emb: textEmb,
@@ -191,11 +191,11 @@ export class TextToSpeech {
       }
     }
 
-    const finalXtTensor = new ort.Tensor(
-      'float32',
-      Float32Array.from(xt.flat(2)),
-      [1, xt[0]!.length, xt[0]![0]!.length],
-    );
+    const finalXtTensor = new ort.Tensor('float32', Float32Array.from(xt.flat(2)), [
+      1,
+      xt[0]!.length,
+      xt[0]![0]!.length,
+    ]);
     const vocoderOutputs = await this.vocoderOrt.run({ latent: finalXtTensor });
     const wav = new Float32Array(vocoderOutputs['wav_tts']!.data as Float32Array);
     return { wav, duration: duration[0] ?? wav.length / this.sampleRate };

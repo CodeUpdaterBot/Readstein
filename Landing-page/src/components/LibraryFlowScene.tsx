@@ -22,7 +22,7 @@ function SparkleField({ scroll }: { scroll: React.MutableRefObject<number> }) {
         scale={[4.5, 3.1, 0.85]}
         size={1.35}
         speed={0.17}
-        color="#edbe6d"
+        color='#edbe6d'
         opacity={0.7}
       />
       <Sparkles
@@ -30,7 +30,7 @@ function SparkleField({ scroll }: { scroll: React.MutableRefObject<number> }) {
         scale={[3.2, 1.8, 0.5]}
         size={2.1}
         speed={0.1}
-        color="#fff1c9"
+        color='#fff1c9'
         opacity={0.45}
       />
     </group>
@@ -50,7 +50,7 @@ export default function LibraryFlowScene() {
   }, []);
 
   return (
-    <div className="hero-canvas" aria-hidden="true">
+    <div className='hero-canvas' aria-hidden='true'>
       <Canvas
         dpr={[1, 1.45]}
         camera={{ position: [0, 0.1, 8.2], fov: 39 }}

@@ -109,10 +109,7 @@ describe('BookTTSCacheStore', () => {
       .mockResolvedValue(db);
     const store = new BookTTSCacheStore(appService, () => 'hash123', 1024 * 1024);
     await store.put('k', entry());
-    expect(appService.deleteDatabase).toHaveBeenCalledWith(
-      'tts-cache/hash123/cache.db',
-      'Cache',
-    );
+    expect(appService.deleteDatabase).toHaveBeenCalledWith('tts-cache/hash123/cache.db', 'Cache');
     expect(openDatabase).toHaveBeenCalledTimes(2);
     expect(await store.get('k')).not.toBeNull();
   });

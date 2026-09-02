@@ -71,7 +71,9 @@ const toWavBuffer = (
   // with NaN after generate() returns.
   const pcm = new Float32Array(src);
   const peak = assertAudiblePcm(pcm, label);
-  console.info(`[Kokoro] ${label} peak=${peak.toFixed(3)} dur=${(pcm.length / sampleRate).toFixed(2)}s`);
+  console.info(
+    `[Kokoro] ${label} peak=${peak.toFixed(3)} dur=${(pcm.length / sampleRate).toFixed(2)}s`,
+  );
   const wav = encodeWav(pcm, sampleRate);
   return { wav, sampleRate, durationSec: pcm.length / sampleRate };
 };

@@ -199,10 +199,7 @@ export class BookIndexer {
  * Read it when known; otherwise probe with a tiny sample so indexing can
  * create `vector32(<dim>)` before the real batches start.
  */
-async function resolveEmbeddingDim(
-  model: EmbeddingModel,
-  signal?: AbortSignal,
-): Promise<number> {
+async function resolveEmbeddingDim(model: EmbeddingModel, signal?: AbortSignal): Promise<number> {
   try {
     const dim = model.dim;
     if (Number.isInteger(dim) && dim > 0) return dim;

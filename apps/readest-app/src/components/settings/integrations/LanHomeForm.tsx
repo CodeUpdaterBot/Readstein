@@ -15,7 +15,11 @@ import {
 } from '@/services/lanHome/native';
 import { lanHomeHello } from '@/services/lanHome/client';
 import { syncFromLanHome } from '@/services/lanHome/sync';
-import { LAN_HOME_DEFAULT_PORT, newLanHomeToken, type LanHomePeer } from '@/services/lanHome/protocol';
+import {
+  LAN_HOME_DEFAULT_PORT,
+  newLanHomeToken,
+  type LanHomePeer,
+} from '@/services/lanHome/protocol';
 import { BoxedList, SettingsInput, SettingsRow, SettingsSwitchRow, Tips } from '../primitives';
 
 const primaryButtonClass = clsx(
@@ -108,7 +112,10 @@ const LanHomeForm: React.FC = () => {
       await persist({ hostEnabled: true, hostPort: st.port, hostName: name, token });
       const ip = st.addrs[0] || 'this PC';
       setStatusLine(_('Sharing at {{addr}}:{{port}}', { addr: ip, port: st.port }));
-      eventDispatcher.dispatch('toast', { type: 'info', message: _('Home library is sharing on your network.') });
+      eventDispatcher.dispatch('toast', {
+        type: 'info',
+        message: _('Home library is sharing on your network.'),
+      });
     } catch (e) {
       await persist({ hostEnabled: false });
       eventDispatcher.dispatch('toast', {
@@ -212,7 +219,9 @@ const LanHomeForm: React.FC = () => {
             label={_('Share this library on the network')}
             description={
               statusLine ||
-              _('Phones on the same Wi-Fi can import books from this PC. Your local shelf stays the source of truth.')
+              _(
+                'Phones on the same Wi-Fi can import books from this PC. Your local shelf stays the source of truth.',
+              )
             }
             checked={lan.hostEnabled}
             disabled={busy}
@@ -229,7 +238,9 @@ const LanHomeForm: React.FC = () => {
             <SettingsInput
               type='number'
               value={String(lan.hostPort || LAN_HOME_DEFAULT_PORT)}
-              onChange={(e) => void persist({ hostPort: Number(e.target.value) || LAN_HOME_DEFAULT_PORT })}
+              onChange={(e) =>
+                void persist({ hostPort: Number(e.target.value) || LAN_HOME_DEFAULT_PORT })
+              }
             />
           </SettingsRow>
         </BoxedList>
@@ -255,7 +266,9 @@ const LanHomeForm: React.FC = () => {
           <SettingsInput
             type='number'
             value={String(lan.clientPort || LAN_HOME_DEFAULT_PORT)}
-            onChange={(e) => void persist({ clientPort: Number(e.target.value) || LAN_HOME_DEFAULT_PORT })}
+            onChange={(e) =>
+              void persist({ clientPort: Number(e.target.value) || LAN_HOME_DEFAULT_PORT })
+            }
           />
         </SettingsRow>
         <SettingsRow label={_('Pairing code')}>
@@ -331,10 +344,14 @@ const LanHomeForm: React.FC = () => {
 
       <Tips>
         <li>
-          {_('Keep this desktop app running while you sync from a phone. Windows may ask to allow Readest through the firewall.')}
+          {_(
+            'Keep this desktop app running while you sync from a phone. Windows may ask to allow Readest through the firewall.',
+          )}
         </li>
         <li>
-          {_('This PC is the home library. Phones match its shelf on sync — adds, title and cover edits, and deletions. Reading progress still merges both ways. There is no Readest Cloud quota.')}
+          {_(
+            'This PC is the home library. Phones match its shelf on sync — adds, title and cover edits, and deletions. Reading progress still merges both ways. There is no Readest Cloud quota.',
+          )}
         </li>
       </Tips>
     </div>

@@ -516,7 +516,9 @@ const TTSPlayerSheet = ({
               onClick={() => setView('engine')}
               className='not-eink:bg-base-200 eink-bordered flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl'
             >
-              <span className='max-w-full truncate px-1 text-sm font-semibold'>{engineCaption}</span>
+              <span className='max-w-full truncate px-1 text-sm font-semibold'>
+                {engineCaption}
+              </span>
               <span className='text-base-content/60 max-w-full truncate px-1 text-xs'>
                 {_('Engine')}
               </span>

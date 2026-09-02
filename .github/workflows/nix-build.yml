@@ -1,8 +1,9 @@
 name: Build with Nix
 
+# Nix packaging is not yet part of Readstein's supported release pipeline.
+# Preserve the workflow for manual packaging work without blocking app changes.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 concurrency:
   group: nix-${{ github.ref }}
   cancel-in-progress: true

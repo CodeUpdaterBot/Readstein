@@ -119,72 +119,72 @@ export const Toast = () => {
     <>
       <StorageQuotaNoticeDialog />
       {toastMessage && (
-      <div
-        data-capture-invalidating-overlay='true'
-        className={clsx(
-          'toast z-[130] w-auto max-w-screen-sm transition-all duration-300',
-          toastClassMap[toastType],
-          isVisible ? 'scale-100 opacity-100' : 'scale-95 opacity-0',
-        )}
-        style={{
-          top: toastClassMap[toastType].includes('toast-top')
-            ? `${(safeAreaInsets?.top || 0) + 44}px`
-            : undefined,
-        }}
-      >
         <div
+          data-capture-invalidating-overlay='true'
           className={clsx(
-            'alert flex items-center gap-3 shadow-2xl backdrop-blur-sm',
-            'min-h-0 rounded-2xl px-5 py-4',
-            'not-eink:bg-gradient-to-r border-0',
-            alertClassMap[toastType],
-            'eink:bg-base-100 eink:border eink:border-base-content',
-            toastType !== 'info' && 'text-white',
+            'toast z-[130] w-auto max-w-screen-sm transition-all duration-300',
+            toastClassMap[toastType],
+            isVisible ? 'scale-100 opacity-100' : 'scale-95 opacity-0',
           )}
+          style={{
+            top: toastClassMap[toastType].includes('toast-top')
+              ? `${(safeAreaInsets?.top || 0) + 44}px`
+              : undefined,
+          }}
         >
-          {/* Icon */}
-          <div className='flex-shrink-0'>{iconMap[toastType]}</div>
-
-          {/* Message */}
-          <span
+          <div
             className={clsx(
-              'max-h-[50vh] flex-1 overflow-y-auto',
-              'font-sans text-base font-medium leading-snug sm:text-sm',
-              toastType === 'info'
-                ? 'max-w-[60vw] truncate sm:max-w-[80vw]'
-                : 'min-w-[60vw] max-w-[80vw] whitespace-normal break-words sm:min-w-40 sm:max-w-80',
-              messageClass,
+              'alert flex items-center gap-3 shadow-2xl backdrop-blur-sm',
+              'min-h-0 rounded-2xl px-5 py-4',
+              'not-eink:bg-gradient-to-r border-0',
+              alertClassMap[toastType],
+              'eink:bg-base-100 eink:border eink:border-base-content',
+              toastType !== 'info' && 'text-white',
             )}
           >
-            {toastMessage.split('\n').map((line, idx) => (
-              <React.Fragment key={idx}>
-                {line || <>&nbsp;</>}
-                {idx < toastMessage.split('\n').length - 1 && <br />}
-              </React.Fragment>
-            ))}
-          </span>
+            {/* Icon */}
+            <div className='flex-shrink-0'>{iconMap[toastType]}</div>
 
-          {/* Close button */}
-          <button
-            onClick={handleDismiss}
-            className={clsx(
-              'flex-shrink-0 rounded-lg p-1 transition-colors',
-              toastType === 'info'
-                ? 'hover:bg-base-300 hidden'
-                : 'hover:bg-white/20 active:bg-white/30',
-            )}
-            aria-label='Dismiss'
-          >
-            <svg className='h-4 w-4' fill='currentColor' viewBox='0 0 20 20'>
-              <path
-                fillRule='evenodd'
-                d='M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z'
-                clipRule='evenodd'
-              />
-            </svg>
-          </button>
+            {/* Message */}
+            <span
+              className={clsx(
+                'max-h-[50vh] flex-1 overflow-y-auto',
+                'font-sans text-base font-medium leading-snug sm:text-sm',
+                toastType === 'info'
+                  ? 'max-w-[60vw] truncate sm:max-w-[80vw]'
+                  : 'min-w-[60vw] max-w-[80vw] whitespace-normal break-words sm:min-w-40 sm:max-w-80',
+                messageClass,
+              )}
+            >
+              {toastMessage.split('\n').map((line, idx) => (
+                <React.Fragment key={idx}>
+                  {line || <>&nbsp;</>}
+                  {idx < toastMessage.split('\n').length - 1 && <br />}
+                </React.Fragment>
+              ))}
+            </span>
+
+            {/* Close button */}
+            <button
+              onClick={handleDismiss}
+              className={clsx(
+                'flex-shrink-0 rounded-lg p-1 transition-colors',
+                toastType === 'info'
+                  ? 'hover:bg-base-300 hidden'
+                  : 'hover:bg-white/20 active:bg-white/30',
+              )}
+              aria-label='Dismiss'
+            >
+              <svg className='h-4 w-4' fill='currentColor' viewBox='0 0 20 20'>
+                <path
+                  fillRule='evenodd'
+                  d='M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z'
+                  clipRule='evenodd'
+                />
+              </svg>
+            </button>
+          </div>
         </div>
-      </div>
       )}
     </>
   );

@@ -1,5 +1,18 @@
 // jsdom does not implement the CSS namespace; foliate-js TTS uses CSS.escape
 // (mark[name="…"] lookups). Provide the standard polyfill so those paths work.
+// CI intentionally has no local `.env`; provide harmless test-only values so
+// importing the shared Supabase client never attempts to decode an undefined
+// fallback variable before individual tests can install their own mocks.
+process.env.SUPABASE_URL ??= 'http://localhost:54321';
+process.env.SUPABASE_ANON_KEY ??= 'test-anon-key';
+
+// @zip.js/zip.js requires the browser-standard Blob/File array-buffer APIs.
+// jsdom's lightweight implementations stringify binary data under Node 24,
+// corrupting in-memory EPUB, CBZ, and dictionary archives in unit tests.
+// Node's standards-compatible Blob keeps in-memory archive tests faithful;
+// leave jsdom's File intact because PDF.js expects its browser-style wrapper.
+globalThis.Blob = NodeBlob as typeof Blob;
+
 const globalWithCSS = globalThis as { CSS?: { escape?: (value: string) => string } };
 if (!globalWithCSS.CSS) globalWithCSS.CSS = {};
 if (typeof globalWithCSS.CSS.escape !== 'function') {

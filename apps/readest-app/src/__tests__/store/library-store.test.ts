@@ -466,7 +466,10 @@ describe('libraryStore', () => {
       });
       useLibraryStore.getState().refreshGroups();
 
-      const names = useLibraryStore.getState().getGroups().map((g) => g.name);
+      const names = useLibraryStore
+        .getState()
+        .getGroups()
+        .map((g) => g.name);
       expect(names).toContain('Empty');
       expect(names).toContain('Fiction');
     });
@@ -508,7 +511,10 @@ describe('libraryStore', () => {
       useLibraryStore.getState().addGroup('Books');
       useLibraryStore.getState().addGroup('Books/Twyman');
       useLibraryStore.getState().remapGroupPaths('Books/Twyman', 'Books/Jim');
-      const names = useLibraryStore.getState().getGroups().map((g) => g.name);
+      const names = useLibraryStore
+        .getState()
+        .getGroups()
+        .map((g) => g.name);
       expect(names).toContain('Books');
       expect(names).toContain('Books/Jim');
       expect(names).not.toContain('Books/Twyman');

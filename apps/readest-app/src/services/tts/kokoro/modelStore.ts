@@ -5,10 +5,7 @@ import {
   kokoroDtypeSize,
   resolveOnDeviceModel,
 } from '../onDeviceCatalog';
-import type {
-  SupertonicWorkerBody,
-  SupertonicWorkerResponse,
-} from '../supertonic/protocol';
+import type { SupertonicWorkerBody, SupertonicWorkerResponse } from '../supertonic/protocol';
 import {
   KOKORO_MODEL_ID,
   MODEL_SIZE_TO_DTYPE,
@@ -107,10 +104,7 @@ const markReady = (size: TTSModelSize) => {
       ? (parsed['readySizes'] as string[])
       : [];
     if (!readySizes.includes(size)) readySizes.push(size);
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ ...parsed, size, readySizes }),
-    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...parsed, size, readySizes }));
   } catch {
     /* ignore */
   }
@@ -209,9 +203,7 @@ class KokoroModelStore {
     if (size === this.#state.size) return;
     persistSize(size);
     void this.shutdown();
-    const sizeReady = isAndroidSherpaPlatform()
-      ? wasSherpaMarkedReady(size)
-      : desktopReady(size);
+    const sizeReady = isAndroidSherpaPlatform() ? wasSherpaMarkedReady(size) : desktopReady(size);
     this.#set({
       size,
       status: sizeReady ? 'ready' : 'idle',

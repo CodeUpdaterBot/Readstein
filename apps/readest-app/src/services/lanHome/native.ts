@@ -13,8 +13,7 @@ export const startLanHomeHost = async (opts: {
   token: string;
   port: number;
   name: string;
-}): Promise<LanHomeHostStatus> =>
-  invoke<LanHomeHostStatus>('lan_library_start', opts);
+}): Promise<LanHomeHostStatus> => invoke<LanHomeHostStatus>('lan_library_start', opts);
 
 export const stopLanHomeHost = async (): Promise<void> => {
   await invoke('lan_library_stop');
