@@ -168,7 +168,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y binaryen
-          cargo install wasm-bindgen-cli --version 0.2.100 --locked
+          cargo install wasm-bindgen-cli --version 0.2.127 --locked
           git clone --depth 1 --branch master https://github.com/BYVoid/OpenCC.git packages/simplecc-wasm/OpenCC
           for dictionary in TWPhrasesIT TWPhrasesName TWPhrasesOther; do
             curl --fail --silent --show-error --location \
@@ -420,7 +420,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y binaryen
-          cargo install wasm-bindgen-cli --version 0.2.100 --locked
+          cargo install wasm-bindgen-cli --version 0.2.127 --locked
           git clone --depth 1 --branch master https://github.com/BYVoid/OpenCC.git packages/simplecc-wasm/OpenCC
           for dictionary in TWPhrasesIT TWPhrasesName TWPhrasesOther; do
             curl --fail --silent --show-error --location \
