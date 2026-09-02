@@ -6,7 +6,7 @@
 
   Readstein is an open-source ebook reader designed for immersive and deep reading experiences. Built as a modern rewrite of [Foliate](https://github.com/johnfactotum/foliate), it leverages [Next.js 16](https://nextjs.org/) and [Tauri v2](https://tauri.app/) to deliver a smooth, cross-platform experience across macOS, Windows, Linux, Android, iOS, and the Web.
 
-  Readstein is an independent, local-first fork of [Readest](https://github.com/readest/readest), built for people who want to keep large personal libraries practical, private, and under their control.
+  Readstein is a local-first fork of [Readest](https://github.com/readest/readest), built for people who want to use a nice modern reader app with unlimited storage without any paid subscriptions.
 
   [![Website][badge-website]][link-website]
   [![Platforms][badge-platforms]][link-website]
@@ -28,7 +28,7 @@
 </p>
 
 > [!NOTE]
-> Readstein is independently maintained and is not affiliated with, endorsed by, or distributed by Readest or Bilingify LLC. It preserves the app's existing subscription and hosted-service paths for people who choose to use them, while adding local-first and bring-your-own-storage workflows for personal libraries.
+> Readstein is independently maintained and is not affiliated with, endorsed by, or distributed by Readest or Bilingify LLC. It preserves the app's existing subscription and hosted-service paths for people who choose to use them (to help support & credit the original project), while adding local-first and bring-your-own-storage workflows for personal libraries.
 
 ## Features
 
