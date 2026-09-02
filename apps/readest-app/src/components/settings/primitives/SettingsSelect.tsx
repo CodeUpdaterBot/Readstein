@@ -51,20 +51,35 @@ const SettingsSelect: React.FC<SettingsSelectProps> = ({
         className='select settings-content h-9 min-w-0 cursor-pointer !appearance-none truncate !border-0 !bg-transparent !bg-none !pe-1 !ps-2 text-end focus:!border-0 focus:!shadow-none focus:!outline-none focus:!ring-0'
         style={{
           textAlignLast: 'end',
+          colorScheme: 'inherit',
         }}
       >
         {groups
           ? groups.map((group) => (
-              <optgroup key={group.label} label={group.label}>
+              <optgroup
+                key={group.label}
+                label={group.label}
+                className='bg-base-100 text-base-content theme-dark:bg-base-100'
+              >
                 {group.options.map((opt) => (
-                  <option key={opt.value} value={opt.value} disabled={opt.disabled}>
+                  <option
+                    key={opt.value}
+                    value={opt.value}
+                    disabled={opt.disabled}
+                    className='bg-base-100 text-base-content theme-dark:bg-base-100'
+                  >
                     {opt.label}
                   </option>
                 ))}
               </optgroup>
             ))
           : options.map((opt) => (
-              <option key={opt.value} value={opt.value} disabled={opt.disabled}>
+              <option
+                key={opt.value}
+                value={opt.value}
+                disabled={opt.disabled}
+                className='bg-base-100 text-base-content theme-dark:bg-base-100'
+              >
                 {opt.label}
               </option>
             ))}
