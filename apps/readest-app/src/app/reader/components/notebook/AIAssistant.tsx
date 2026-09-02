@@ -537,12 +537,21 @@ const LegacyAIAssistant = ({ bookKey }: AIAssistantProps) => {
     setIsIndexing(true);
     setIndexError(null);
     try {
+      const providerAvailable = await getAIProvider(aiSettings).isAvailable();
+      if (!providerAvailable) {
+        setIndexError(
+          'Error connecting to your configured AI provider. Open AI Assistant settings to verify that everything is configured correctly and the provider is running.',
+        );
+        return;
+      }
       await backend.indexBook(bookData.bookDoc, bookHash, { onProgress: setIndexProgress });
       setIndexed(true);
     } catch (e) {
       const message = (e as Error).message || String(e);
       aiLogger.rag.indexError(bookHash, message);
-      setIndexError(message);
+      setIndexError(
+        'Error connecting to your configured AI provider. Open AI Assistant settings to verify that everything is configured correctly and the provider is running.',
+      );
     } finally {
       setIsIndexing(false);
       setIndexProgress(null);

@@ -119,7 +119,7 @@ function chatModelIdFor(settings: AISettings): string {
         settings.aiGatewayCustomModel || settings.aiGatewayModel || 'google/gemini-2.5-flash-lite'
       );
     case 'openrouter':
-      return settings.openrouterModel || 'openai/gpt-4o-mini';
+      return settings.openrouterModel || 'gpt-5.6-luna';
   }
 }
 

@@ -5,13 +5,13 @@ import { aiLogger } from '../logger';
 import { AI_TIMEOUTS } from '../utils/retry';
 import { getAIFetch } from '../utils/httpFetch';
 
-const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
-const DEFAULT_MODEL = 'openai/gpt-4o-mini';
-const DEFAULT_EMBEDDING_MODEL = 'openai/text-embedding-3-small';
+const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
+const DEFAULT_MODEL = 'gpt-5.6-luna';
+const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
 
 /**
  * Provider for any OpenAI-compatible /v1/chat/completions endpoint, with
- * OpenRouter as the default. Users supply their own API key and base URL.
+ * OpenAI as the default. Users supply their own API key and base URL.
  *
  * Distinct from `AIGatewayProvider` (which is bound to Vercel AI Gateway's
  * proprietary protocol) — this one targets the OpenAI REST schema and so
@@ -25,7 +25,7 @@ const DEFAULT_EMBEDDING_MODEL = 'openai/text-embedding-3-small';
  */
 export class OpenRouterProvider implements AIProvider {
   id: AIProviderName = 'openrouter';
-  name = 'OpenRouter (Custom)';
+  name = 'OpenAI Compatible';
   requiresAuth = true;
 
   private settings: AISettings;

@@ -29,5 +29,10 @@
     "**/*.{js,jsx,ts,tsx,css,json}": [
       "biome format --write --no-errors-on-unmatched"
     ]
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "@assistant-ui/react@0.11.58": "patches/@assistant-ui__react@0.11.58.patch"
+    }
   }
 }

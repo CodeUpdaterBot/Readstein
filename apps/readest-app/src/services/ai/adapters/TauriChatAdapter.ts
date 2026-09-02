@@ -131,6 +131,10 @@ export function createTauriAdapter(getOptions: () => TauriAdapterOptions): ChatM
             messages: aiMessages,
             tools: { lookupPassage: tool },
             stopWhen: stepCountIs(3),
+            providerOptions:
+              settings.provider === 'openrouter'
+                ? { openrouter: { reasoningEffort: 'medium' } }
+                : undefined,
             abortSignal,
           });
           for await (const chunk of result.textStream) {
@@ -179,6 +183,10 @@ export function createTauriAdapter(getOptions: () => TauriAdapterOptions): ChatM
               model: provider.getModel(),
               system: systemPrompt,
               messages: aiMessages,
+              providerOptions:
+                settings.provider === 'openrouter'
+                  ? { openrouter: { reasoningEffort: 'medium' } }
+                  : undefined,
               abortSignal,
             });
             for await (const chunk of result.textStream) {
