@@ -163,6 +163,8 @@ jobs:
           toolchain: stable
           target: wasm32-unknown-unknown
       - name: build SimpleCC WASM vendor
+        env:
+          RUSTC_WRAPPER: ''
         run: |
           sudo apt-get update
           sudo apt-get install -y binaryen
@@ -408,6 +410,8 @@ jobs:
           target: wasm32-unknown-unknown
       - name: build SimpleCC WASM vendor
         if: steps.changes.outputs.tauri == 'true'
+        env:
+          RUSTC_WRAPPER: ''
         run: |
           sudo apt-get update
           sudo apt-get install -y binaryen
