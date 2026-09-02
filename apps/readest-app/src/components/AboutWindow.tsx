@@ -6,7 +6,13 @@ import { parseWebViewInfo } from '@/utils/ua';
 import { getAppVersion } from '@/utils/version';
 import { writeTextToClipboard } from '@/utils/clipboard';
 import { eventDispatcher } from '@/utils/event';
-import { FORK_NAME, UPSTREAM_GITHUB } from '@/utils/fork';
+import {
+  FORK_AUTHOR,
+  FORK_AUTHOR_SITE,
+  FORK_GITHUB,
+  FORK_NAME,
+  UPSTREAM_GITHUB,
+} from '@/utils/fork';
 import SupportLinks from './SupportLinks';
 import LegalLinks from './LegalLinks';
 import Dialog from './Dialog';
@@ -84,7 +90,10 @@ export const AboutWindow = () => {
             <div className='flex select-text flex-col items-center'>
               <h2 className='text-2xl font-bold'>{FORK_NAME}</h2>
               <p className='text-neutral-content mt-0.5 text-xs'>
-                {_('Independent fork of Readest')}
+                {_('a fork of Readest, by')}{' '}
+                <Link href={FORK_AUTHOR_SITE} className='text-blue-500 underline'>
+                  {FORK_AUTHOR}
+                </Link>
               </p>
               <button
                 type='button'
@@ -98,11 +107,15 @@ export const AboutWindow = () => {
             <ul className='text-neutral-content mt-2 max-w-[26rem] space-y-1.5 text-left text-xs leading-snug'>
               <li>
                 <span className='text-base-content font-medium'>{_('Home Library.')}</span>{' '}
-                {_('Run the desktop app as a local library server so phones on the same Wi‑Fi can sync books while both apps are open — with no Readest Cloud storage quota.')}
+                {_(
+                  'Run the desktop app as a local library server so phones on the same Wi‑Fi can sync books while both apps are open — with no Readest Cloud storage quota.',
+                )}
               </li>
               <li>
                 <span className='text-base-content font-medium'>{_('Cloud import.')}</span>{' '}
-                {_('Bring in Google Drive and other cloud providers without a paid Readest subscription.')}
+                {_(
+                  'Bring in Google Drive and other cloud providers without a paid Readest subscription.',
+                )}
               </li>
               <li>
                 <span className='text-base-content font-medium'>{_('Kokoro TTS.')}</span>{' '}
@@ -118,19 +131,28 @@ export const AboutWindow = () => {
             dir='ltr'
           >
             <p className='text-neutral-content text-xs'>
-              {_('Based on Readest by Bilingify LLC')}.{' '}
-              {_('Licensed under the')}{' '}
+              {_('Based on Readest by Bilingify LLC')}. {_('Licensed under the')}{' '}
               <Link
                 href='https://www.gnu.org/licenses/agpl-3.0.html'
                 className='text-blue-500 underline'
               >
                 GNU AGPL v3.0
               </Link>
-              . {_('This fork is independently modified and does not install official Readest updates.')}
+              .{' '}
+              {_(
+                'This fork is independently modified and does not install official Readest updates.',
+              )}
             </p>
             <p className='text-neutral-content text-xs'>
               {_('Original source:')}{' '}
               <Link href={UPSTREAM_GITHUB} className='text-blue-500 underline'>
+                GitHub
+              </Link>
+              .
+            </p>
+            <p className='text-neutral-content text-xs'>
+              {_('New source:')}{' '}
+              <Link href={FORK_GITHUB} className='text-blue-500 underline'>
                 GitHub
               </Link>
               .
