@@ -75,7 +75,11 @@ You don't need a subscription to use this app, especially with the local compute
 
 ![On-device TTS model picker with Kokoro and Supertonic model variants](./data/screenshots/readstein/on-device-tts-models.png)
 
-![Mobile on-device model picker listing Piper, Kitten, and Supertonic models with size and storage details](./data/screenshots/readstein/on-device-tts-mobile.jpg)
+<img
+  src="./data/screenshots/readstein/on-device-tts-mobile.jpg"
+  alt="Mobile on-device model picker listing Piper, Kitten, and Supertonic models with size and storage details"
+  width="420"
+/>
 
 ### Folder management for large collections
 
