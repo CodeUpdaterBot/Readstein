@@ -27,6 +27,10 @@
   <a href="#license">License</a>
 </p>
 
+![Readstein reader showing a two-page book with text selection, annotations, and reading controls](./data/screenshots/readstein/reader-overview.png)
+
+![Readstein dark-mode library grid showing a visual collection of book covers](./data/screenshots/readstein/library-grid.png)
+
 > [!NOTE]
 > Readstein is independently maintained and is not affiliated with, endorsed by, or distributed by Readest or Bilingify LLC. It preserves the app's existing subscription and hosted-service paths for people who choose to use them (to help support & credit the original project), while adding local-first and bring-your-own-storage workflows for personal libraries.
 
@@ -74,6 +78,8 @@ Readstein does **not** remove the existing subscription, Cloud, checkout, or pai
 ![Compact reader TTS controls with playback and settings access](./data/screenshots/readstein/tts-quick-controls.png)
 
 ![Reader progress view with the floating voice control](./data/screenshots/readstein/reader-progress.png)
+
+![Readstein integrated TTS preview showing local voice options for books and PDFs](./data/screenshots/readstein/readstein-tts-preview.jpg)
 
 ## Downloads
 
@@ -191,9 +197,9 @@ It is a derivative work of [Readest](https://github.com/readest/readest), which 
 [badge-website]: https://img.shields.io/badge/website-readstein.com-0f766e
 [badge-platforms]: https://img.shields.io/badge/platforms-macOS%2C%20Windows%2C%20Linux%2C%20Android%2C%20iOS%2C%20Web-0f766e
 [badge-license]: https://img.shields.io/badge/license-AGPL--3.0-0f766e
-[badge-release]: https://img.shields.io/github/v/release/CodeUpdaterBot/Readstein?color=16a34a
-[badge-last-commit]: https://img.shields.io/github/last-commit/CodeUpdaterBot/Readstein?color=2563eb
-[badge-commit-activity]: https://img.shields.io/github/commit-activity/m/CodeUpdaterBot/Readstein?color=2563eb
+[badge-release]: https://img.shields.io/badge/latest%20release-v0.12.1-16a34a
+[badge-last-commit]: https://img.shields.io/badge/last%20commit-a2e45f9-2563eb
+[badge-commit-activity]: https://img.shields.io/badge/commit%20activity-active-2563eb
 [link-website]: https://readstein.com
 [link-gh-releases]: https://github.com/CodeUpdaterBot/Readstein/releases
 [link-gh-commits]: https://github.com/CodeUpdaterBot/Readstein/commits/main
