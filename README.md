@@ -31,6 +31,8 @@
 
 ![Readstein reader showing a two-page book with text selection, annotations, and reading controls](./data/screenshots/readstein/reader-overview.png)
 
+![Readstein reader showing a book, navigation, and integrated AI chat tools](./data/screenshots/readstein/readstein-ai-chat.gif)
+
 
 ## Features
 
@@ -72,6 +74,8 @@ You don't need a subscription to use this app, especially with the local compute
 ### On-device TTS model selection
 
 ![On-device TTS model picker with Kokoro and Supertonic model variants](./data/screenshots/readstein/on-device-tts-models.png)
+
+![Mobile on-device model picker listing Piper, Kitten, and Supertonic models with size and storage details](./data/screenshots/readstein/on-device-tts-mobile.jpg)
 
 ### Folder management for large collections
 
