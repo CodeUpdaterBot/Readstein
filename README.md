@@ -61,23 +61,21 @@ You don't need a subscription to use this app, especially with the local compute
 
 ![Google Drive integration dialog showing the library folder, sync strategy, and book upload progress](./data/screenshots/readstein/google-drive-sync.png)
 
-### Folder management for large collections
+### Local TTS for Mobile & Desktop
 
-![Book-library folder context menu with options to rename, remove, select, move, or delete books](./data/screenshots/readstein/folder-management.png)
-
-### On-device TTS model selection
-
-![On-device TTS model picker with Kokoro and Supertonic model variants](./data/screenshots/readstein/on-device-tts-models.png)
+![Readstein integrated TTS preview showing local voice options for books and PDFs](./data/screenshots/readstein/readstein-tts-preview.jpg)
 
 ### In-reader TTS playback and controls
 
 ![TTS player with speed, voice, sleep timer, engine, and model controls](./data/screenshots/readstein/tts-player.png)
 
-![Compact reader TTS controls with playback and settings access](./data/screenshots/readstein/tts-quick-controls.png)
+### On-device TTS model selection
 
-![Reader progress view with the floating voice control](./data/screenshots/readstein/reader-progress.png)
+![On-device TTS model picker with Kokoro and Supertonic model variants](./data/screenshots/readstein/on-device-tts-models.png)
 
-![Readstein integrated TTS preview showing local voice options for books and PDFs](./data/screenshots/readstein/readstein-tts-preview.jpg)
+### Folder management for large collections
+
+![Book-library folder context menu with options to rename, remove, select, move, or delete books](./data/screenshots/readstein/folder-management.png)
 
 ## Downloads
 
