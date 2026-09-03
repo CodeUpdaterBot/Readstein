@@ -27,9 +27,9 @@
   <a href="#license">License</a>
 </p>
 
-![Readstein reader showing a two-page book with text selection, annotations, and reading controls](./data/screenshots/readstein/reader-overview.png)
+![Readstein dark-themed book library in a six-column grid with view, grouping, and sorting controls open](./data/screenshots/readstein/library-overview.png)
 
-![Readstein dark-mode library grid showing a visual collection of book covers](./data/screenshots/readstein/library-grid.png)
+![Readstein reader showing a two-page book with text selection, annotations, and reading controls](./data/screenshots/readstein/reader-overview.png)
 
 > [!NOTE]
 > Readstein is independently maintained and is not affiliated with, endorsed by, or distributed by Readest or Bilingify LLC. It preserves the app's existing subscription and hosted-service paths for people who choose to use them (to help support & credit the original project), while adding local-first and bring-your-own-storage workflows for personal libraries.
@@ -51,7 +51,7 @@
 
 ### Subscription compatibility
 
-Readstein does **not** remove the existing subscription, Cloud, checkout, or paid-plan paths from the application. If you want to use the original hosted services or a subscription, those flows remain available. Readstein's focus is simply to keep local storage, local-network sharing, and personal cloud-provider workflows useful for readers with substantial libraries.
+You don't need a subscription to use this app, especially with the local computer-hosting and cloud services opened up. Although for maximum compatibility, the official Readest subscription & account system remains in place. So if you want to use the original Readest-hosted services or subscription, those flows remain available in this app as well.
 
 ## Screenshots
 
