@@ -31,8 +31,6 @@
 
 ![Readstein reader showing a two-page book with text selection, annotations, and reading controls](./data/screenshots/readstein/reader-overview.png)
 
-> [!NOTE]
-> Readstein is independently maintained and is not affiliated with, endorsed by, or distributed by Readest or Bilingify LLC. It preserves the app's existing subscription and hosted-service paths for people who choose to use them (to help support & credit the original project), while adding local-first and bring-your-own-storage workflows for personal libraries.
 
 ## Features
 
@@ -57,15 +55,15 @@ You don't need a subscription to use this app, especially with the local compute
 
 ### Home Library — keep the library on your own PC
 
-![Home Library settings for sharing a local library on the same Wi-Fi](./data/screenshots/readstein/home-library.png)
+![Home Library integration dialog showing network sharing enabled and options for pairing a phone or another PC over Wi-Fi](./data/screenshots/readstein/home-library.png)
 
 ### Google Drive import and sync controls
 
-![Google Drive integration with import, upload, full-sync, and sync-strategy controls](./data/screenshots/readstein/google-drive-sync.png)
+![Google Drive integration dialog showing the library folder, sync strategy, and book upload progress](./data/screenshots/readstein/google-drive-sync.png)
 
 ### Folder management for large collections
 
-![Folder context menu with rename, select, move, and book-management actions](./data/screenshots/readstein/folder-management.png)
+![Book-library folder context menu with options to rename, remove, select, move, or delete books](./data/screenshots/readstein/folder-management.png)
 
 ### On-device TTS model selection
 
@@ -189,6 +187,9 @@ Readstein is maintained in the open. The best way to help is to:
 Readstein is free software, released under the [GNU Affero General Public License v3.0](LICENSE), or (at your option) any later version.
 
 It is a derivative work of [Readest](https://github.com/readest/readest), which is also licensed under AGPL-3.0. See [`LICENSE`](LICENSE) for the full terms.
+
+> [!NOTE]
+> Readstein is independently maintained and is not affiliated with, endorsed by, or distributed by Readest or Bilingify LLC. It preserves the app's existing subscription and hosted-service paths for people who choose to use them (to help support & credit the original project), while adding local-first and bring-your-own-storage workflows for personal libraries.
 
 ---
 
