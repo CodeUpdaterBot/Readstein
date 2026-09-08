@@ -82,3 +82,15 @@ apps/readest-app/src-tauri/gen/android/app/src/main/jniLibs/
 *.keystore
 *.jks
 *.mobileprovision
+
+# Local AI-assistant instructions (never commit)
+AGENTS.md
+SOUL.md
+.hermes.md
+CLAUDE.md
+
+# Private reader data (never commit)
+/personal-library/
+/private-library/
+/library-backups/
+/storage/runs/

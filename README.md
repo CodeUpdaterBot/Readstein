@@ -49,6 +49,12 @@
 | **Improved AI chat** | Use configurable local or OpenAI-compatible providers for book-aware chat, with provider checks and clear setup guidance instead of raw runtime errors. |
 | **Readest foundations** | Keep the features readers expect: EPUB/PDF/MOBI/KF8/AZW3/FB2/CBZ/TXT/Markdown support, annotations, search, dictionaries, translation, OPDS/Calibre support, themes, accessibility, and cross-device reading workflows. |
 
+### Privacy and local library data
+
+Personal books, reading progress, annotations, local database data, and library backups are runtime data and are not part of this repository. Keep that data in the app's local storage or another private location; do not add it to Git. The repository only includes deliberately published source, product screenshots, and test fixtures used to validate document handling.
+
+The root `.gitignore` excludes common local library and backup folders. It intentionally does not broadly ignore document extensions because the app maintains open test fixtures for supported formats.
+
 ### Subscription compatibility
 
 You don't need a subscription to use this app, especially with the local computer-hosting and cloud services opened up. Although for maximum compatibility, the official Readest subscription & account system remains in place. So if you want to use the original Readest-hosted services or subscription, those flows remain available in this app as well.
