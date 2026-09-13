@@ -89,6 +89,10 @@ SOUL.md
 .hermes.md
 CLAUDE.md
 
+# Internal agent state (never commit)
+/apps/readest-app/.claude/memory/
+/apps/readest-app/.agents/
+
 # Private reader data (never commit)
 /personal-library/
 /private-library/
