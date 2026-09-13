@@ -4,7 +4,7 @@
 
 ### Overview
 
-Readest is a cross-platform e-reader (macOS, Windows, Linux, Android, iOS, Web) built on Next.js and Tauri. It processes user-supplied ebook files, syncs data to the cloud, integrates with external services (OPDS catalogs, KOReader, DeepL, Yandex), and handles user authentication.
+Readstein is a cross-platform e-reader (macOS, Windows, Linux, Android, iOS, Web) built on Next.js and Tauri. It is an independently maintained, local-first fork of Readest. It processes user-supplied ebook files, syncs data to the cloud, integrates with external services (OPDS catalogs, KOReader, DeepL, Yandex), and handles user authentication.
 
 ### Assets
 
@@ -60,27 +60,29 @@ Readest is a cross-platform e-reader (macOS, Windows, Linux, Android, iOS, Web) 
 
 ### Out of Scope
 
-- Vulnerabilities in user's operating system or browser outside of Readest's control
+- Vulnerabilities in the user's operating system or browser outside of Readstein's control
 - Physical access attacks to a user's device
 - Issues in third-party services (DeepL, Yandex, Calibre) themselves
 
 ## Supported Versions
 
-Readest does not currently maintain separate release channels. Security updates are provided only for the latest release series.
+Readstein does not currently maintain separate release channels. Security updates are provided only for the latest release series.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.10.x  | :white_check_mark: |
-| < 0.10  | :x:                |
+| 0.12.x  | :white_check_mark: |
+| < 0.12  | :x:                |
 
 ## Reporting a Vulnerability
 
 Please report suspected vulnerabilities privately. Do not open a public GitHub
 issue or discussion for security-sensitive reports.
 
-Use GitHub's private vulnerability reporting for this repository:
+Use GitHub's private vulnerability reporting for Readstein when it is enabled for this repository:
 
-<https://github.com/readest/readest/security/advisories/new>
+<https://github.com/CodeUpdaterBot/Readstein/security/advisories/new>
+
+Until that GitHub setting is enabled, do not post security-sensitive details in a public issue.
 
 When submitting a report, include:
 
