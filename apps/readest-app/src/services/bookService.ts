@@ -201,6 +201,21 @@ function displaceSourcePath(book: Book, nextFilePath: string, osPlatform?: OsPla
   book.altFilePaths = paths.length > 0 ? paths : undefined;
 }
 
+/**
+ * Point a book at a new on-disk path because its file moved (a folder move, or the
+ * user renaming it outside the app). The path being left is kept as an alternative
+ * for the same reason a re-import displaces one: the auto-import scan must keep
+ * treating that location as accounted for rather than rediscovering it as new.
+ */
+export const retargetBookFilePath = (
+  book: Book,
+  nextFilePath: string,
+  osPlatform?: OsPlatform,
+): void => {
+  displaceSourcePath(book, nextFilePath, osPlatform);
+  book.filePath = nextFilePath;
+};
+
 export interface CoverContext {
   fs: FileSystem;
   appPlatform: AppPlatform;

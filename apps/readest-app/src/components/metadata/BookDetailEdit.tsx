@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { MdEdit, MdDelete, MdLock, MdLockOpen, MdOutlineSearch } from 'react-icons/md';
 
 import { Book } from '@/types/book';
-import { BookMetadata } from '@/libs/document';
+import { BookMetadata, PublishedDateComponent } from '@/libs/document';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { flattenContributors, formatAuthors, formatPublisher, formatTitle } from '@/utils/book';
@@ -20,7 +20,10 @@ interface BookDetailEditProps {
   lockedFields: Record<string, boolean>;
   fieldErrors: Record<string, string>;
   searchLoading: boolean;
-  onFieldChange: (field: string, value: string | undefined) => void;
+  onFieldChange: (
+    field: string,
+    value: string | undefined | PublishedDateComponent[],
+  ) => void;
   onToggleFieldLock: (field: string) => void;
   onAutoRetrieve: () => void;
   onLockAll: () => void;
@@ -33,6 +36,9 @@ interface BookDetailEditProps {
 }
 
 const emptyCoverImageUrl = '_blank';
+
+const dateInputStyles =
+  'w-full rounded-md bg-base-200/50 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500';
 
 const BookDetailEdit: React.FC<BookDetailEditProps> = ({
   book,
@@ -164,6 +170,39 @@ const BookDetailEdit: React.FC<BookDetailEditProps> = ({
       placeholder: _('Enter book description'),
     },
   ];
+
+  // A work can carry more than one date (composite manuscripts, palimpsests,
+  // volumes bound from parts made at different times). `published` above is the
+  // primary date; these are the extra dated components.
+  const publishedDates: PublishedDateComponent[] = metadata.publishedDates ?? [];
+
+  const commitPublishedDates = (next: PublishedDateComponent[]) => {
+    onFieldChange('publishedDates', next);
+  };
+
+  const handleAddPublishedDate = () => {
+    commitPublishedDates([...publishedDates, { start: undefined, end: undefined, label: '', part: '' }]);
+  };
+
+  const handlePublishedDateChange = (
+    index: number,
+    key: 'start' | 'end' | 'label' | 'part',
+    raw: string,
+  ) => {
+    const next = publishedDates.map((entry, i) => {
+      if (i !== index) return entry;
+      if (key === 'start' || key === 'end') {
+        const parsed = raw.trim() === '' ? Number.NaN : Number.parseInt(raw, 10);
+        return { ...entry, [key]: Number.isFinite(parsed) ? parsed : undefined };
+      }
+      return { ...entry, [key]: raw };
+    });
+    commitPublishedDates(next);
+  };
+
+  const handleRemovePublishedDate = (index: number) => {
+    commitPublishedDates(publishedDates.filter((_, i) => i !== index));
+  };
 
   const handleSelectLocalImage = async () => {
     selectFiles({ type: 'covers', multiple: false }).then(async (result) => {
@@ -317,6 +356,75 @@ const BookDetailEdit: React.FC<BookDetailEditProps> = ({
               placeholder={placeholder}
             />
           ),
+        )}
+      </div>
+
+      {/* Publication dates — a work may carry more than one */}
+      <div className='published-dates mb-6'>
+        <div className='mb-1 flex items-center justify-between'>
+          <span className='text-base-content block text-sm font-medium'>
+            {_('Additional Publication Dates')}
+          </span>
+          <button
+            type='button'
+            onClick={handleAddPublishedDate}
+            className='rounded px-2 py-1 text-sm text-blue-600 hover:bg-blue-50'
+          >
+            + {_('Add date')}
+          </button>
+        </div>
+        <p className='text-neutral-content/70 mb-2 text-xs leading-relaxed'>
+          {_(
+            'For works that carry more than one date — composite manuscripts, palimpsests, or volumes bound from parts made at different times. Every date here is searchable, so a date-range search finds this book through any of them.',
+          )}
+        </p>
+        {publishedDates.length === 0 ? (
+          <p className='text-neutral-content/60 text-sm'>{_('No additional dates.')}</p>
+        ) : (
+          <div className='space-y-2'>
+            {publishedDates.map((entry, index) => (
+              <div key={index} className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+                <input
+                  type='number'
+                  inputMode='numeric'
+                  value={entry.start ?? ''}
+                  onChange={(e) => handlePublishedDateChange(index, 'start', e.target.value)}
+                  placeholder={_('From year')}
+                  className={clsx(dateInputStyles, 'sm:w-28')}
+                />
+                <input
+                  type='number'
+                  inputMode='numeric'
+                  value={entry.end ?? ''}
+                  onChange={(e) => handlePublishedDateChange(index, 'end', e.target.value)}
+                  placeholder={_('To year')}
+                  className={clsx(dateInputStyles, 'sm:w-28')}
+                />
+                <input
+                  type='text'
+                  value={entry.part ?? ''}
+                  onChange={(e) => handlePublishedDateChange(index, 'part', e.target.value)}
+                  placeholder={_('What this date applies to')}
+                  className={clsx(dateInputStyles, 'flex-1')}
+                />
+                <input
+                  type='text'
+                  value={entry.label ?? ''}
+                  onChange={(e) => handlePublishedDateChange(index, 'label', e.target.value)}
+                  placeholder={_('Label (e.g. 10th century)')}
+                  className={clsx(dateInputStyles, 'sm:w-40')}
+                />
+                <button
+                  type='button'
+                  onClick={() => handleRemovePublishedDate(index)}
+                  title={_('Remove date')}
+                  className='flex items-center justify-center rounded p-1 text-red-500 hover:bg-red-50'
+                >
+                  <MdDelete className='h-4 w-4' />
+                </button>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

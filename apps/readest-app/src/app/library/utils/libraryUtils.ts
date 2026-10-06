@@ -13,6 +13,7 @@ import {
 import { md5Fingerprint } from '@/utils/md5';
 import { SIZE_PER_LOC, SIZE_PER_TIME_UNIT } from '@/services/constants';
 import { isFeedBook } from '@/services/rss/feedBookUrl';
+import { folderParentPath } from './folderOps';
 
 /** Valid sort types for the library */
 const VALID_SORT_TYPES: LibrarySortByType[] = Object.values(LibrarySortByType);
@@ -197,6 +198,20 @@ const getBookTags = (book: Book): string[] => normalizeValues(book.tags ?? []);
 const getBookValuesText = (book: Book): string =>
   [...getBookTags(book), ...getBookSubjects(book)].join(' ');
 
+/**
+ * Theme queries are typed the way a person thinks ("Jewish history"), while the
+ * breadcrumbs on a book may be separate tags ("Jews", "History"). A plain
+ * substring test would miss that pairing, so for multi-word queries fall back to
+ * requiring every word of the query to appear somewhere in the tag/subject text.
+ * Single-word queries are unaffected.
+ */
+const matchesAllQueryWords = (haystack: string, query: string): boolean => {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length < 2) return false;
+  const hay = haystack.toLowerCase();
+  return words.every((word) => hay.includes(word));
+};
+
 export const createBookFilter = (queryTerm: string | null) => (item: Book) => {
   if (!queryTerm) return true;
   if (item.deletedAt) return false;
@@ -216,6 +231,7 @@ export const createBookFilter = (queryTerm: string | null) => (item: Book) => {
       (item.metadata?.description &&
         item.metadata.description.toLowerCase().includes(lowerQuery)) ||
       getBookValuesText(item).toLowerCase().includes(lowerQuery) ||
+      matchesAllQueryWords(getBookValuesText(item), lowerQuery) ||
       getCalibreColumnsText(item).toLowerCase().includes(lowerQuery)
     );
   }
@@ -228,6 +244,7 @@ export const createBookFilter = (queryTerm: string | null) => (item: Book) => {
     (item.groupName && searchTerm.test(item.groupName)) ||
     (item.metadata?.description && searchTerm.test(item.metadata?.description)) ||
     searchTerm.test(getBookValuesText(item)) ||
+    matchesAllQueryWords(getBookValuesText(item), queryTerm) ||
     searchTerm.test(getCalibreColumnsText(item))
   );
 };
@@ -839,6 +856,7 @@ export const createGroupSorter =
 export type BookContextMenuItemId =
   | 'select'
   | 'group'
+  | 'moveOutOfFolder'
   | 'assign'
   | 'markFinished'
   | 'markUnread'
@@ -967,6 +985,10 @@ export const getBookContextMenuItemIds = (
   opts?: { localSend?: boolean; household?: boolean },
 ): BookContextMenuItemId[] => {
   const ids: BookContextMenuItemId[] = ['select', 'group'];
+  // Moving a book between folders is the same kind of library-level operation as
+  // grouping, so it sits beside it — and only appears when the book is actually
+  // inside a folder, since a top-level book has no parent to move up into.
+  if (folderParentPath(book.groupName || '')) ids.push('moveOutOfFolder');
   if (opts?.household) ids.push('assign');
   ids.push(book.readingStatus === 'finished' ? 'markUnread' : 'markFinished');
   if (book.readingStatus !== 'abandoned') ids.push('markAbandoned');

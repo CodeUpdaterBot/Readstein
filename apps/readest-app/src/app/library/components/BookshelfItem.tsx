@@ -138,6 +138,7 @@ interface BookshelfItemProps {
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
   toggleSelection: (hash: string) => void;
   handleGroupBooks: () => void;
+  handleMoveOutOfFolder?: (book: Book) => void;
   handleAssignHousehold?: (book: Book) => void;
   handleBookDownload: (
     book: Book,
@@ -164,6 +165,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
   setLoading,
   toggleSelection,
   handleGroupBooks,
+  handleMoveOutOfFolder,
   handleAssignHousehold,
   handleBookUpload,
   handleBookDownload,
@@ -232,6 +234,12 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
             toggleSelection(book.hash);
           }
           handleGroupBooks();
+        },
+      },
+      moveOutOfFolder: {
+        text: _('Move out of Folder'),
+        action: async () => {
+          handleMoveOutOfFolder?.(book);
         },
       },
       assign: {

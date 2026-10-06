@@ -10,6 +10,7 @@ import type {
 import type { DatabaseService } from '@/types/database';
 import type { AppService } from '@/types/system';
 import type { ClosableFile } from '@/utils/file';
+import { isEnglishBook } from '@/utils/book';
 import { findContainsMatches } from '@/utils/containsSearch';
 import { findFuzzyMatches, MAX_FUZZY_QUERY_LENGTH } from '@/utils/fuzzySearch';
 import type { LibrarySearchWorkerMatch } from '@/utils/librarySearchWorkerProtocol';
@@ -462,10 +463,16 @@ export async function* searchLibraryBooks(
   options: LibrarySearchOptions = {},
 ): AsyncGenerator<LibrarySearchEvent> {
   const config: LibrarySearchConfig = { ...DEFAULT_CONFIG, ...options.config, scope: 'book' };
+  // "English only" decides *which books* are searched, so it is resolved up front:
+  // a Latin or German source is then never parsed, indexed or counted against the
+  // per-search work budget. Excluded books are reported as skipped, so the progress
+  // percentage and the "N books skipped" note stay truthful.
+  const searchableBooks = config.englishOnly ? books.filter(isEnglishBook) : books;
+  const languageSkippedBooks = books.length - searchableBooks.length;
   const { signal } = options;
   const maxResultsPerBook = options.maxResultsPerBook ?? MAX_BOOK_SEARCH_RESULTS;
   let searchedBooks = 0;
-  let skippedBooks = 0;
+  let skippedBooks = languageSkippedBooks;
   let erroredBooks = 0;
   let totalMatches = 0;
   let truncated = false;
@@ -584,14 +591,14 @@ export async function* searchLibraryBooks(
     }
   };
 
-  for (const [bookIndex, book] of books.entries()) {
+  for (const [bookIndex, book] of searchableBooks.entries()) {
     if (signal?.aborted) return;
     let file: File | null = null;
     let bookDoc: SearchableBookDoc | null = null;
     let indexDb: DatabaseService | null = null;
     const ownsIndexDb = !options.session;
     try {
-      yield { type: 'book-started', book, bookIndex, totalBooks: books.length };
+      yield { type: 'book-started', book, bookIndex, totalBooks: searchableBooks.length };
       const locale = book.primaryLanguage || 'en';
 
       // Opening (and thereby creating) a search.db is not free, so probe
@@ -673,7 +680,7 @@ export async function* searchLibraryBooks(
           type: 'progress',
           book,
           bookProgress: 1,
-          progress: (bookIndex + 1) / books.length,
+          progress: (bookIndex + 1) / searchableBooks.length,
           sectionsCompleted: totalSections,
           totalSections,
         };
@@ -805,7 +812,7 @@ export async function* searchLibraryBooks(
             type: 'progress',
             book,
             bookProgress,
-            progress: (bookIndex + bookProgress) / books.length,
+            progress: (bookIndex + bookProgress) / searchableBooks.length,
             sectionsCompleted,
             totalSections,
           };

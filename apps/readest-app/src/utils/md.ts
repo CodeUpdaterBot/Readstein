@@ -107,9 +107,29 @@ export async function makeMarkdownBook(file: File): Promise<BookDoc> {
     if (!h.id) h.id = uniqueId(slugify(h.textContent ?? ''));
   }
 
-  // Split the top-level nodes into sections at <h1> boundaries. Content before
-  // the first <h1> becomes a leading preamble section (only when it has real
-  // content). A document with no <h1> stays a single section.
+  // Split the top-level nodes into sections at heading boundaries. Content
+  // before the first heading of that level becomes a leading preamble section
+  // (only when it has real content).
+  //
+  // The level is the shallowest one that actually structures the document, i.e.
+  // the first level carrying at least two headings. Splitting only on <h1> would
+  // leave a very common shape as one enormous section: a single <h1> title with
+  // its real structure in <h2>s (generated translations using "## Page N", for
+  // example). One section means no per-chapter TOC, no reading progress and — the
+  // reason this matters — a content search that returns one undifferentiated blob
+  // instead of per-section results.
+  const structuralHeadingLevel = (() => {
+    for (let level = 1; level <= 6; level++) {
+      const tag = `H${level}`;
+      const count = Array.from(docBody.childNodes).filter(
+        (node) => node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === tag,
+      ).length;
+      if (count >= 2) return level;
+    }
+    // Fewer than two headings anywhere: a single section either way.
+    return 1;
+  })();
+  const structuralHeadingTag = `H${structuralHeadingLevel}`;
   const hasContent = (nodes: ChildNode[]): boolean =>
     nodes.some(
       (n) =>
@@ -119,7 +139,7 @@ export async function makeMarkdownBook(file: File): Promise<BookDoc> {
   const groups: ChildNode[][] = [];
   let current: ChildNode[] = [];
   for (const node of Array.from(docBody.childNodes)) {
-    if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === 'H1') {
+    if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === structuralHeadingTag) {
       if (hasContent(current)) groups.push(current);
       current = [node];
     } else {

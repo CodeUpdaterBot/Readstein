@@ -11,7 +11,7 @@ import {
 } from 'react-icons/md';
 
 import { Book } from '@/types/book';
-import { BookMetadata } from '@/libs/document';
+import { BookMetadata, PublishedDateComponent } from '@/libs/document';
 import { openExternalUrl } from '@/utils/open';
 import { getBookGoodreadsQuery, getGoodreadsSearchUrl } from '@/utils/goodreads';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -27,12 +27,39 @@ import {
   formatTitle,
   getContributorNames,
 } from '@/utils/book';
+import { eventDispatcher } from '@/utils/event';
 import { isFeedBook } from '@/services/rss/feedBookUrl';
 import { saveSysSettings } from '@/helpers/settings';
 import BookCover from '@/components/BookCover';
 import BookCoverViewer, { useBookCoverViewer } from '@/components/BookCoverViewer';
 import Dropdown from '../Dropdown';
 import MenuItem from '../MenuItem';
+
+
+/**
+ * Render one dated component of a work. The numeric years are the searchable
+ * value, so they lead; `label` only appears when it says something the numbers
+ * do not (e.g. "10th century"), and `part` says which part of the work it covers.
+ */
+/**
+ * Ask whoever owns the open-book path to open a related book by hash. The details
+ * view is rendered from both the library shelf and the reader, so it dispatches
+ * rather than reaching for a router it may not own.
+ */
+const openRelatedBook = (hash?: string): void => {
+  if (!hash) return;
+  void eventDispatcher.dispatch('open-book-by-hash', { hash });
+};
+
+const formatPublishedComponent = (entry: PublishedDateComponent): string => {
+  const { start, end } = entry;
+  if (start != null && end != null) {
+    return start === end ? String(start) : `${start}-${end}`;
+  }
+  if (start != null) return `${start}-`;
+  if (end != null) return `-${end}`;
+  return entry.label || '';
+};
 
 interface BookDetailViewProps {
   book: Book;
@@ -277,6 +304,67 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                     {formatDate(metadata?.published, true) || _('Unknown')}
                   </p>
                 </div>
+                {/*
+                  Multi-date works (composite manuscripts, palimpsests, volumes
+                  bound from parts of different dates): every dated component is
+                  listed, because a date-range search matches through any of them.
+                  Edit them in Edit Metadata under "Additional Publication Dates".
+                */}
+                {(metadata?.translations?.length ?? 0) > 0 && (
+                  <div className='col-span-2 overflow-hidden sm:col-span-3'>
+                    <span className='font-bold'>{_('Translations')}</span>
+                    <div className='mt-1 flex flex-col items-start gap-1'>
+                      {(metadata?.translations ?? []).map((translation, index) => (
+                        <button
+                          key={index}
+                          type='button'
+                          onClick={() => openRelatedBook(translation.hash)}
+                          className='text-left text-sm text-blue-600 hover:underline'
+                          title={translation.file}
+                        >
+                          {translation.title || translation.file}
+                          {translation.language ? ` (${translation.language})` : ''}
+                          {translation.translated ? ` — ${translation.translated}` : ''}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {metadata?.translationOf && (
+                  <div className='col-span-2 overflow-hidden sm:col-span-3'>
+                    <span className='font-bold'>{_('Translated from')}</span>
+                    <div className='mt-1'>
+                      <button
+                        type='button'
+                        onClick={() => openRelatedBook(metadata.translationOf)}
+                        className='text-left text-sm text-blue-600 hover:underline'
+                      >
+                        {metadata.translationOfTitle || _('the source book')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {(metadata?.publishedDates?.length ?? 0) > 0 && (
+                  <div className='col-span-2 overflow-hidden sm:col-span-3'>
+                    <span className='font-bold'>{_('Publication Dates')}</span>
+                    <div className='mt-1 space-y-1'>
+                      {(metadata?.publishedDates ?? []).map((entry, index) => {
+                        const range = formatPublishedComponent(entry);
+                        return (
+                          <p key={index} className='text-neutral-content text-sm'>
+                            <span className='font-medium'>{range}</span>
+                            {entry.label && entry.label !== range ? (
+                              <span className='text-neutral-content/70'> · {entry.label}</span>
+                            ) : null}
+                            {entry.part ? (
+                              <span className='text-neutral-content/60'> — {entry.part}</span>
+                            ) : null}
+                          </p>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 <div className='overflow-hidden'>
                   <span className='font-bold'>{_('Updated')}</span>
                   <p className='text-neutral-content text-sm'>{formatDate(book.updatedAt) || ''}</p>

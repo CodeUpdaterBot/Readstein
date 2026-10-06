@@ -27,6 +27,7 @@ import {
   closeReaderWindowOrGoToLibrary,
   ensureMainLibraryWindow,
   navigateToLibrary,
+  navigateToReader,
 } from '@/utils/nav';
 import { clearDiscordPresence } from '@/utils/discord';
 import { BOOK_IDS_SEPARATOR } from '@/services/constants';
@@ -357,6 +358,9 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
           onClose={() => setHardcoverLinkBookKey(null)}
         />
       )}
+      {/* The details dialog can link to a translation (or back to the source).
+          Inside the reader, follow it by switching this window to that book. */}
+      <OpenRelatedBookEffect />
       <Notebook />
       <LocalSendManager />
       {showDetailsBook && (
@@ -374,6 +378,28 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
       />
     </div>
   );
+};
+
+/**
+ * Follows an `open-book-by-hash` request from the book details dialog by opening
+ * that book in this reader window. Kept as its own component so the subscription
+ * cannot re-run when ReaderContent's unrelated state changes.
+ */
+const OpenRelatedBookEffect: React.FC = () => {
+  const router = useRouter();
+  useEffect(() => {
+    const onOpenBookByHash = (event: CustomEvent) => {
+      const hash = (event.detail as { hash?: string } | undefined)?.hash;
+      if (!hash) return;
+      const target = useLibraryStore
+        .getState()
+        .library.find((book) => book.hash === hash && !book.deletedAt);
+      if (target) navigateToReader(router, [hash]);
+    };
+    eventDispatcher.on('open-book-by-hash', onOpenBookByHash);
+    return () => eventDispatcher.off('open-book-by-hash', onOpenBookByHash);
+  }, [router]);
+  return null;
 };
 
 export default ReaderContent;

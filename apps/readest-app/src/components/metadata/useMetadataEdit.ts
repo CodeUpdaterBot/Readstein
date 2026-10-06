@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BookMetadata } from '@/libs/document';
+import { BookMetadata, PublishedDateComponent } from '@/libs/document';
 import {
   validateAndNormalizeDate,
   validateAndNormalizeLanguage,
@@ -28,6 +28,7 @@ export const useMetadataEdit = (metadata: BookMetadata | null, tags: string[]) =
     'isbn',
     'publisher',
     'published',
+    'publishedDates',
     'language',
     'identifier',
     'subject',
@@ -59,17 +60,36 @@ export const useMetadataEdit = (metadata: BookMetadata | null, tags: string[]) =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleFieldChange = (field: string, value: string | undefined) => {
+  const handleFieldChange = (
+    field: string,
+    value: string | undefined | PublishedDateComponent[],
+  ) => {
     if (lockedFields[field]) {
       return;
     }
+
+    // Structured (non-string) fields hand their value over untouched; they have
+    // no textual validation and must not be run through the string cases below.
+    if (field === 'publishedDates') {
+      setEditedMeta((prevMeta) => ({
+        ...prevMeta,
+        publishedDates: (value as PublishedDateComponent[]) ?? [],
+      }));
+      clearFieldSource(field);
+      return;
+    }
+
+    // Everything below is textual; the array-valued fields returned above.
+    const textValue: string | undefined = Array.isArray(value) ? undefined : value;
 
     // Tags live on the book, not in the metadata document; they still edit
     // like Subjects — a separator-split string. Empty segments survive so a
     // just-typed comma is not swallowed by the value round-trip; they are
     // dropped at save time.
     if (field === 'tags') {
-      setEditedTags(value ? value.split(/,|;|，|、/).map((tag) => tag.trim()) : []);
+      setEditedTags(
+        textValue ? textValue.split(/,|;|，|、/).map((tag) => tag.trim()) : [],
+      );
       return;
     }
 
@@ -77,34 +97,38 @@ export const useMetadataEdit = (metadata: BookMetadata | null, tags: string[]) =
       const newMeta = { ...prevMeta } as { [key: string]: unknown };
       switch (field) {
         case 'subject':
-          newMeta['subject'] = value ? value.split(/,|;|，|、/).map((s) => s.trim()) : [];
+          newMeta['subject'] = textValue ? textValue.split(/,|;|，|、/).map((s) => s.trim()) : [];
           break;
         // Number inputs still hand over strings; stored as-is they persist and
         // sync as "2", and every numeric consumer (formatSeries, the reader's
         // data-book-series-index) drops the index.
         case 'seriesIndex':
         case 'seriesTotal': {
-          const parsed = value ? parseFloat(value) : Number.NaN;
+          const parsed = textValue ? parseFloat(textValue) : Number.NaN;
           newMeta[field] = Number.isFinite(parsed) ? parsed : undefined;
           break;
         }
         default:
-          newMeta[field] = value;
+          newMeta[field] = textValue;
       }
       return newMeta as BookMetadata;
     });
 
-    if (value !== undefined) {
-      handleFieldValidation(field, value);
+    if (textValue !== undefined) {
+      handleFieldValidation(field, textValue);
     }
 
-    if (fieldSources[field]) {
-      setFieldSources((prevSources) => {
-        const newSources = { ...prevSources };
-        delete newSources[field];
-        return newSources;
-      });
-    }
+    clearFieldSource(field);
+  };
+
+  /** A hand-edited field is no longer attributed to its metadata source. */
+  const clearFieldSource = (field: string) => {
+    setFieldSources((prevSources) => {
+      if (!prevSources[field]) return prevSources;
+      const newSources = { ...prevSources };
+      delete newSources[field];
+      return newSources;
+    });
   };
 
   const handleFieldValidation = (field: string, value: string) => {

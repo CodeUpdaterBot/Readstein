@@ -64,6 +64,37 @@ export interface CalibreCustomColumn {
   extra?: number;
 }
 
+/**
+ * One dated component of a work.
+ *
+ * A work can carry more than one date: a composite manuscript, a palimpsest
+ * (erased lower script + later upper script), or a volume bound from parts
+ * written at different times. `start`/`end` are years inclusive — a single date
+ * sets both to the same value — and stay numeric so the components are
+ * searchable and sortable. `label` keeps the scholarly wording ("10th century")
+ * for display, and `part` says which part of the work the date belongs to.
+ */
+export type PublishedDateComponent = {
+  start?: number;
+  end?: number;
+  label?: string;
+  part?: string;
+};
+
+/**
+ * A pointer from a book to a translation of it that lives elsewhere in the
+ * library (see {@link BookMetadata.translations}). Only `hash` is required —
+ * it is what identifies the target book record.
+ */
+export type TranslationLink = {
+  hash: string;
+  title?: string;
+  language?: string;
+  pages?: string;
+  translated?: string;
+  file?: string;
+};
+
 export type BookMetadata = {
   // NOTE: the title and author fields should be formatted
   title: string | LanguageMap;
@@ -72,6 +103,23 @@ export type BookMetadata = {
   editor?: string;
   publisher?: string;
   published?: string;
+  /**
+   * Additional dated components for multi-date works (see
+   * {@link PublishedDateComponent}). `published` stays the primary /
+   * representative date; every entry here is another date that applies to some
+   * part of the work, so a date-range search matches through any of them.
+   */
+  publishedDates?: PublishedDateComponent[];
+  /**
+   * Translations of this work that are themselves in the library — one entry per
+   * translated file, so the details view can offer them next to the source. Set
+   * on the source book; the translation carries `translationOf` back.
+   */
+  translations?: TranslationLink[];
+  /** On a translation: the library hash of the work it translates. */
+  translationOf?: string;
+  /** Title of the translated-from work, so a missing target still reads well. */
+  translationOfTitle?: string;
   description?: string;
   subject?: string | string[] | Contributor | Contributor[];
   identifier?: string;

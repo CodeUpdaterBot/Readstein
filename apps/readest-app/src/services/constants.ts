@@ -63,6 +63,17 @@ export const SUPPORTED_BOOK_EXTS = [
   'md',
 ];
 export const BOOK_ACCEPT_FORMATS = SUPPORTED_BOOK_EXTS.map((ext) => `.${ext}`).join(', ');
+
+/**
+ * Extensions the *watched-folder* auto-import scans for.
+ *
+ * Markdown is deliberately excluded. It stays a supported book format for
+ * deliberate imports (file picker, drag-and-drop), but in a document or
+ * translation workspace `.md` files are usually working notes, and a
+ * background rescan would silently turn every one of them into a "book"
+ * in the library. Auto-import should only ever pick up real book files.
+ */
+export const AUTO_IMPORT_BOOK_EXTS = SUPPORTED_BOOK_EXTS.filter((ext) => ext !== 'md');
 export const BOOK_UNGROUPED_NAME = '';
 export const BOOK_UNGROUPED_ID = '';
 

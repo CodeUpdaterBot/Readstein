@@ -74,7 +74,7 @@ import { SelectedFile, useFileSelector } from '@/hooks/useFileSelector';
 import { lockScreenOrientation, selectDirectory, showFilePicker } from '@/utils/bridge';
 import { useAndroidPickedBooks } from '@/hooks/useAndroidFilePicker';
 import { requestStoragePermission } from '@/utils/permission';
-import { SUPPORTED_BOOK_EXTS } from '@/services/constants';
+import { AUTO_IMPORT_BOOK_EXTS, SUPPORTED_BOOK_EXTS } from '@/services/constants';
 import {
   tauriHandleClose,
   tauriHandleSetAlwaysOnTop,
@@ -99,6 +99,7 @@ import { MigrateDataWindow } from './components/MigrateDataWindow';
 import { BackupWindow } from './components/BackupWindow';
 import { CacheManagerWindow } from './components/CacheManagerWindow';
 import { useDragDropImport } from './hooks/useDragDropImport';
+import { useOpenBook } from './hooks/useOpenBook';
 import { useTransferQueue } from '@/hooks/useTransferQueue';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { Toast } from '@/components/Toast';
@@ -115,6 +116,7 @@ import Bookshelf from './components/Bookshelf';
 import LibraryEmptyState from './components/LibraryEmptyState';
 import ImportMenuPopup from './components/ImportMenuPopup';
 import GroupHeader from './components/GroupHeader';
+import SpiralSearchView from './components/SpiralSearchView';
 import FailedImportsDialog, { FailedImport } from './components/FailedImportsDialog';
 import ImportFromFolderDialog, {
   ImportFromFolderResult,
@@ -164,6 +166,7 @@ const getLibrarySearchConfig = (
     mode: modeParam && LIBRARY_SEARCH_MODES.includes(modeParam) ? modeParam : 'contains',
     matchCase: searchParams?.get('matchCase') === 'true',
     matchDiacritics: searchParams?.get('matchDiacritics') === 'true',
+    englishOnly: searchParams?.get('englishOnly') === 'true',
     nearbyWords:
       Number.isFinite(nearbyParam) && nearbyParam > 0 ? nearbyParam : DEFAULT_NEARBY_WORDS,
   };
@@ -268,6 +271,9 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   const [isSelectAll, setIsSelectAll] = useState(false);
   const [isSelectNone, setIsSelectNone] = useState(false);
   const [librarySearchQuery, setLibrarySearchQuery] = useState(searchParams?.get('q') ?? '');
+  // Spiral (radial) view of the same search. Kept in the URL so the view survives
+  // a reload and a back-navigation, exactly like the other search options.
+  const [spiralMode, setSpiralMode] = useState(searchParams?.get('spiral') === '1');
   const pendingLibrarySearchQueryRef = useRef<string | null>(null);
   const [librarySearchProgress, setLibrarySearchProgress] = useState<number | null>(null);
   const [librarySearchHistory, setLibrarySearchHistory] = useState<string[]>([]);
@@ -674,7 +680,16 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
 
   const libraryInitKey = (() => {
     const params = new URLSearchParams(searchParams?.toString());
-    for (const key of ['q', 'search', 'mode', 'matchCase', 'matchDiacritics', 'nearby']) {
+    for (const key of [
+      'q',
+      'search',
+      'mode',
+      'matchCase',
+      'matchDiacritics',
+      'englishOnly',
+      'nearby',
+      'spiral',
+    ]) {
       params.delete(key);
     }
     return params.toString();
@@ -1085,13 +1100,13 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
           await appService.allowPathsInScopes?.([folder], true);
           autoImportGrantedFoldersRef.current.add(folder);
         }
-        const items = await appService.readDirectory(folder, 'None', SUPPORTED_BOOK_EXTS);
+        const items = await appService.readDirectory(folder, 'None', AUTO_IMPORT_BOOK_EXTS);
         const entries = items.map((item) => ({
           fullPath: joinScannedPath(folder, item.path),
           size: item.size,
         }));
         const fresh = selectNewImportableFiles(entries, {
-          extensions: SUPPORTED_BOOK_EXTS,
+          extensions: AUTO_IMPORT_BOOK_EXTS,
           minSizeBytes: AUTO_IMPORT_MIN_SIZE_BYTES,
           existingPaths,
           osPlatform,
@@ -1150,6 +1165,44 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     updateBook,
     setBooksTransferProgress,
   );
+
+  // The spiral view opens books the same way the shelf does: through the shared
+  // hook, so availability, windowing and the search-term handoff all behave the
+  // same whichever view the user searched from.
+  const { openBook } = useOpenBook({ setLoading, handleBookDownload });
+  const handleOpenSpiralResult = useCallback(
+    (book: Book, cfi: string) => {
+      void openBook(book, cfi, {
+        highlightSearchResult: true,
+        searchQuery: librarySearchQuery,
+        searchConfig: librarySearchConfig,
+      });
+    },
+    [openBook, librarySearchQuery, librarySearchConfig],
+  );
+  // Opening a work from the dial without a search behind it: no cfi, no query, so
+  // the reader behaves exactly as if the book had been tapped on the shelf.
+  const handleOpenSpiralBook = useCallback((book: Book) => void openBook(book), [openBook]);
+  const toggleSpiralMode = useCallback(() => {
+    setSpiralMode((current) => !current);
+  }, []);
+
+  // Mirror the view into the URL, but never from inside a state updater: React can
+  // invoke an updater during render, and `history.replaceState` makes the router
+  // update, which React rejects as a render-phase side effect.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (spiralMode) params.set('spiral', '1');
+    else params.delete('spiral');
+    const value = params.toString();
+    if (window.location.search.replace(/^\?/, '') === value) return;
+    window.history.replaceState(null, '', value ? `?${value}` : window.location.pathname);
+  }, [spiralMode]);
+
+  // Keep the view in step with the URL (back/forward navigation).
+  useEffect(() => {
+    setSpiralMode(searchParams?.get('spiral') === '1');
+  }, [searchParams]);
 
   const handleBookDelete = (deleteAction: DeleteAction) => {
     return async (book: Book, syncBooks = true) => {
@@ -1817,6 +1870,8 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     else params.delete('matchCase');
     if (config.matchDiacritics) params.set('matchDiacritics', 'true');
     else params.delete('matchDiacritics');
+    if (config.englishOnly) params.set('englishOnly', 'true');
+    else params.delete('englishOnly');
     if (config.mode === 'nearby-words' && config.nearbyWords !== DEFAULT_NEARBY_WORDS) {
       params.set('nearby', String(config.nearbyWords));
     } else {
@@ -1944,6 +1999,8 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
           onSearchConfigChange={handleSearchConfigChange}
           onSearchQueryChange={handleSearchQueryChange}
           onSearchTargetChange={handleSearchTargetChange}
+          spiralMode={spiralMode}
+          onToggleSpiral={toggleSpiralMode}
         />
         <progress
           aria-label={_('Library Search Progress')}
@@ -2057,30 +2114,48 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
               }}
             >
               <DropIndicator />
-              <Bookshelf
-                libraryBooks={libraryBooks}
-                isSelectMode={isSelectMode}
-                isSelectAll={isSelectAll}
-                isSelectNone={isSelectNone}
-                onScrollerRef={handleScrollerRef}
-                handleImportBooks={setImportMenuAnchor}
-                handleBookUpload={handleBookUpload}
-                handleBookDownload={handleBookDownload}
-                handleBookDelete={handleBookDelete('both')}
-                handleBookPurge={handleBookDelete('purge')}
-                handleSetSelectMode={handleSetSelectMode}
-                handleShowDetailsBook={handleShowDetailsBook}
-                handleLibraryNavigation={handleLibraryNavigation}
-                booksTransferProgress={booksTransferProgress}
-                handlePushLibrary={pushLibrary}
-                onSearchContents={() => handleSearchTargetChange('text')}
-                onSearchProgress={setLibrarySearchProgress}
-                contentSearch={
-                  librarySearchTarget === 'text'
-                    ? { query: searchParams?.get('q') ?? '', config: librarySearchConfig }
-                    : null
-                }
-              />
+              {spiralMode && appService ? (
+                <SpiralSearchView
+                  appService={appService}
+                  // The same set the shelf's result list searches, so a scan that
+                  // one view finished is reusable by the other rather than being
+                  // repeated with a different key.
+                  books={libraryBooks.filter((book) => !book.deletedAt)}
+                  query={librarySearchQuery}
+                  config={librarySearchConfig}
+                  target={librarySearchTarget}
+                  onQueryChange={handleSearchQueryChange}
+                  onRequestContentSearch={() => handleSearchTargetChange('text')}
+                  onSelectResult={handleOpenSpiralResult}
+                  onOpenBook={handleOpenSpiralBook}
+                  onExit={toggleSpiralMode}
+                />
+              ) : (
+                <Bookshelf
+                  libraryBooks={libraryBooks}
+                  isSelectMode={isSelectMode}
+                  isSelectAll={isSelectAll}
+                  isSelectNone={isSelectNone}
+                  onScrollerRef={handleScrollerRef}
+                  handleImportBooks={setImportMenuAnchor}
+                  handleBookUpload={handleBookUpload}
+                  handleBookDownload={handleBookDownload}
+                  handleBookDelete={handleBookDelete('both')}
+                  handleBookPurge={handleBookDelete('purge')}
+                  handleSetSelectMode={handleSetSelectMode}
+                  handleShowDetailsBook={handleShowDetailsBook}
+                  handleLibraryNavigation={handleLibraryNavigation}
+                  booksTransferProgress={booksTransferProgress}
+                  handlePushLibrary={pushLibrary}
+                  onSearchContents={() => handleSearchTargetChange('text')}
+                  onSearchProgress={setLibrarySearchProgress}
+                  contentSearch={
+                    librarySearchTarget === 'text'
+                      ? { query: searchParams?.get('q') ?? '', config: librarySearchConfig }
+                      : null
+                  }
+                />
+              )}
             </div>
           </div>
         ) : (

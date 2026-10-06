@@ -16,6 +16,14 @@ import type {
 } from '@/types/book';
 import type { AppService } from '@/types/system';
 import { addLibrarySearchHistory } from '../utils/searchHistory';
+import {
+  makeLibrarySearchKey,
+  readLibrarySearchSnapshot,
+  updateLibrarySearchSnapshotExpanded,
+  writeLibrarySearchSnapshot,
+  type SearchIssue as SearchIssueEntry,
+  type SearchResultGroup,
+} from '../utils/librarySearchSnapshot';
 
 interface LibrarySearchResultsProps {
   appService: AppService;
@@ -26,17 +34,8 @@ interface LibrarySearchResultsProps {
   onProgress?: (value: number | null) => void;
 }
 
-interface ResultGroup {
-  book: Book;
-  sections: LibrarySearchSectionResult[];
-  matchCount: number;
-  truncated?: boolean;
-}
-
-interface SearchIssue {
-  book: Book;
-  message: string;
-}
+type ResultGroup = SearchResultGroup;
+type SearchIssue = SearchIssueEntry;
 
 // Errors about the query itself (not any particular book); rendered as a
 // banner without book attribution.
@@ -46,18 +45,9 @@ const QUERY_LEVEL_CODES = new Set([
   'FUZZY_QUERY_TOO_LONG',
 ]);
 
-// Snapshot of the last completed scan, module-scoped so that opening a result
-// in the reader and navigating back restores the results (and which groups
-// were expanded) instead of rescanning the library.
-interface CompletedSearchSnapshot {
-  searchKey: string;
-  groups: ResultGroup[];
-  issues: SearchIssue[];
-  skipped: number;
-  truncated: boolean;
-  expandedBooks: string[];
-}
-let completedSearchSnapshot: CompletedSearchSnapshot | null = null;
+// The finished scan lives in a shared store (see librarySearchSnapshot) so that
+// opening a result in the reader and coming back — or flipping between this list
+// and the spiral dial — restores the results instead of rescanning the library.
 
 const Emphasis = ({ children }: { children: React.ReactNode }) => (
   <strong className='search-term-highlight'>{children}</strong>
@@ -180,24 +170,14 @@ const LibrarySearchResults = ({
   // Key on content identity only: opening a result bumps the book's progress
   // timestamp and its recency-sort position, and neither changes what a
   // rescan would find — index staleness is handled per book at search time.
-  const booksKey = books
-    .map((book) => book.hash)
-    .sort()
-    .join('|');
-  const configKey = [
-    config.mode,
-    config.matchCase,
-    config.matchDiacritics,
-    config.nearbyWords,
-  ].join(':');
-  const searchKey = `${booksKey}\0${configKey}\0${query}`;
+  const searchKey = makeLibrarySearchKey(books, config, query);
   const activeSearchKeyRef = useRef(searchKey);
 
   useEffect(() => {
     activeSearchKeyRef.current = searchKey;
     controllerRef.current?.abort();
-    const snapshot = completedSearchSnapshot;
-    if (snapshot && snapshot.searchKey === searchKey) {
+    const snapshot = readLibrarySearchSnapshot(searchKey);
+    if (snapshot) {
       groupsRef.current = snapshot.groups;
       issuesRef.current = snapshot.issues;
       skippedRef.current = snapshot.skipped;
@@ -296,14 +276,14 @@ const LibrarySearchResults = ({
           setActiveBook('');
           setPhase('completed');
           setTruncated(Boolean(event.truncated));
-          completedSearchSnapshot = {
+          writeLibrarySearchSnapshot({
             searchKey,
             groups: groupsRef.current,
             issues: issuesRef.current,
             skipped: skippedRef.current,
             truncated: Boolean(event.truncated),
             expandedBooks: [],
-          };
+          });
           if (event.matchCount > 0) addLibrarySearchHistory(query);
         }
       }
@@ -340,9 +320,7 @@ const LibrarySearchResults = ({
     setExpandedBooks((current) => {
       const next = new Set(current);
       if (!next.delete(bookHash)) next.add(bookHash);
-      if (completedSearchSnapshot?.searchKey === activeSearchKeyRef.current) {
-        completedSearchSnapshot.expandedBooks = [...next];
-      }
+      updateLibrarySearchSnapshotExpanded(activeSearchKeyRef.current, [...next]);
       return next;
     });
   };

@@ -115,6 +115,73 @@ export const applyFolderDissolve = (
   return books;
 };
 
+/** Final segment of a path, treating `/` and `\` alike as separators. */
+export const fileLeafName = (filePath: string): string => {
+  const last = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  return filePath.slice(last + 1);
+};
+
+/**
+ * Where a book's file lands when it leaves its folder: the sibling directory one
+ * level up, keeping the file's own name. Null when there is no path, or when the
+ * path has no parent to move into. Separators are preserved exactly as they appear
+ * in `filePath`, so a Windows path stays a Windows path.
+ */
+export const moveOutFileDestination = (filePath?: string): string | null => {
+  if (!filePath) return null;
+  const isSeparator = (char: string) => char === '/' || char === '\\';
+  let last = -1;
+  let previous = -1;
+  for (let i = filePath.length - 1; i >= 0; i--) {
+    if (!isSeparator(filePath[i]!)) continue;
+    if (last === -1) last = i;
+    else {
+      previous = i;
+      break;
+    }
+  }
+  // `previous < 0` means the file sits at a drive or share root: nowhere to go.
+  if (last <= 0 || previous < 0) return null;
+  return filePath.slice(0, previous) + filePath.slice(last);
+};
+
+/**
+ * The read-in-place root a path belongs to, if any. Only files under a root the
+ * user reads in place have a directory tree the library mirrors, so only those may
+ * be moved on disk — a copy held in the app's own storage has no folder to follow.
+ */
+export const inPlaceRootFor = (filePath: string, roots: string[]): string | undefined => {
+  const normalized = filePath.replace(/\\/g, '/');
+  return roots
+    .map((root) => root.replace(/\\/g, '/').replace(/\/+$/, ''))
+    .find((root) => normalized.startsWith(`${root}/`));
+};
+
+/**
+ * Lift a single book one level, out of its own folder and into its parent — the
+ * one-book counterpart of {@link applyFolderDissolve}.
+ *
+ * This is the library half of the move: it rewrites the group and leaves the file
+ * to the caller, which relocates it (see `moveOutFileDestination`) so the folder
+ * tree on disk keeps matching the shelf. Books the app stored itself have no such
+ * file, and this alone is the whole move for them.
+ *
+ * Returns false when the book is not in a folder, in which case there is no
+ * parent level to move it up into.
+ */
+export const applyBookMoveOutOfFolder = (
+  book: Book,
+  getGroupId: (path: string) => string,
+): boolean => {
+  const groupName = book.groupName || '';
+  const parent = folderParentPath(groupName);
+  if (!groupName || !parent) return false;
+  book.groupName = parent;
+  book.groupId = getGroupId(parent);
+  book.updatedAt = Date.now();
+  return true;
+};
+
 export const emptyFolderAsGroup = (id: string, fullPath: string): BooksGroup => ({
   id,
   name: fullPath,

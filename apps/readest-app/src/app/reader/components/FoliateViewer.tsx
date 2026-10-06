@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { convertBlobUrlToDataUrl, BookDoc, getDirection } from '@/libs/document';
 import { BOOK_IDS_SEPARATOR } from '@/services/constants';
-import { BookConfig, PageInfo } from '@/types/book';
+import { BookConfig, BookSearchConfig, PageInfo, SearchMode } from '@/types/book';
 import { FoliateView, wrappedFoliateView } from '@/types/view';
 import { Insets } from '@/types/misc';
 import { useEnv } from '@/context/EnvContext';
@@ -13,6 +13,7 @@ import { useBookDataStore } from '@/store/bookDataStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useCustomFontStore } from '@/store/customFontStore';
 import { useParallelViewStore } from '@/store/parallelViewStore';
+import { useSidebarStore } from '@/store/sidebarStore';
 import { useMouseEvent, useTouchEvent, useOpenMediaEvent } from '../hooks/useIframeEvents';
 import { useCapturedTurn, applyPageTurnAttributes } from '../hooks/useCapturedTurn';
 import { useBrightnessGesture } from '../hooks/useBrightnessGesture';
@@ -827,6 +828,38 @@ const FoliateViewer: React.FC<{
           view,
           overrideLocation,
         );
+      }
+
+      // Opened from a library-wide search result: seed the in-book find bar with
+      // the same term (and the options the library searched with) so the reader
+      // lands with those matches already marked, instead of an empty find box the
+      // user has to retype. Reads state directly rather than through hooks so it
+      // stays inside this one-shot mount effect with no new dependencies.
+      const searchQueryParam = searchParams?.get('q');
+      if (searchQueryParam && primaryId === thisId) {
+        const qmode = searchParams?.get('qmode');
+        const qcase = searchParams?.get('qcase');
+        const qdiac = searchParams?.get('qdiac');
+        const qnear = searchParams?.get('qnear');
+        if (qmode || qcase || qdiac || qnear) {
+          const bookDataStore = useBookDataStore.getState();
+          const currentConfig = bookDataStore.getConfig(bookKey);
+          if (currentConfig) {
+            bookDataStore.setConfig(bookKey, {
+              searchConfig: {
+                ...(currentConfig.searchConfig as BookSearchConfig),
+                ...(qmode ? { mode: qmode as SearchMode } : {}),
+                ...(qcase ? { matchCase: true } : {}),
+                ...(qdiac ? { matchDiacritics: true } : {}),
+                ...(qnear ? { nearbyWords: Number(qnear) } : {}),
+              },
+            });
+          }
+        }
+        const sidebarStore = useSidebarStore.getState();
+        sidebarStore.setSideBarVisible(true);
+        sidebarStore.setSearchBarVisible(true);
+        sidebarStore.setSearchTerm(bookKey, searchQueryParam);
       }
     };
 

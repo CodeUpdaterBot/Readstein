@@ -55,7 +55,7 @@ const LibrarySearchOptionsMenu: React.FC<LibrarySearchOptionsMenuProps> = ({
   // reader sidebar's SearchOptions menu.
   const labelIndent = `${iconSize + 16}px`;
   const update = (
-    key: 'matchCase' | 'matchDiacritics' | 'nearbyWords',
+    key: 'matchCase' | 'matchDiacritics' | 'englishOnly' | 'nearbyWords',
     value: boolean | number,
   ) => {
     onConfigChange({ ...config, [key]: value });
@@ -140,6 +140,11 @@ const LibrarySearchOptionsMenu: React.FC<LibrarySearchOptionsMenuProps> = ({
         isActive={config.matchDiacritics && !diacriticsDisabled}
         disabled={diacriticsDisabled}
         onClick={() => update('matchDiacritics', !config.matchDiacritics)}
+      />
+      <Option
+        label={_('English Only')}
+        isActive={!!config.englishOnly}
+        onClick={() => update('englishOnly', !config.englishOnly)}
       />
     </div>
   );

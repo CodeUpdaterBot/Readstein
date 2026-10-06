@@ -1,7 +1,7 @@
 import clsx from 'clsx';
 import React, { useRef } from 'react';
 import { FaChevronDown, FaSearch } from 'react-icons/fa';
-import { MdManageSearch } from 'react-icons/md';
+import { MdManageSearch, MdOutlineDonutLarge } from 'react-icons/md';
 import { PiPlus } from 'react-icons/pi';
 import { PiSelectionAll, PiSelectionAllFill } from 'react-icons/pi';
 import { PiDotsThreeCircle } from 'react-icons/pi';
@@ -43,6 +43,8 @@ interface LibraryHeaderProps {
   onSearchConfigChange: (config: LibrarySearchConfig) => void;
   onSearchQueryChange: (query: string) => void;
   onSearchTargetChange: (target: LibrarySearchTarget) => void;
+  spiralMode: boolean;
+  onToggleSpiral: () => void;
 }
 
 const LibraryHeader: React.FC<LibraryHeaderProps> = ({
@@ -65,6 +67,8 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
   onSearchConfigChange,
   onSearchQueryChange,
   onSearchTargetChange,
+  spiralMode,
+  onToggleSpiral,
 }) => {
   const _ = useTranslation();
   const { appService } = useEnv();
@@ -196,6 +200,22 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
                 <IoMdCloseCircle className='h-4 w-4' />
               </button>
             )}
+            <span className='bg-base-content/50 mx-2 h-4 w-[0.5px]'></span>
+            {/* Spiral (radial) view of the same search: available with or without
+                a query, so a search already in the box can be re-seen as a dial. */}
+            <button
+              type='button'
+              aria-pressed={spiralMode}
+              aria-label={_('Spiral Search')}
+              title={_('Spiral Search')}
+              onClick={onToggleSpiral}
+              className={clsx(
+                'touch-target flex h-6 items-center justify-center',
+                spiralMode ? 'text-primary' : 'text-base-content/50 hover:text-base-content',
+              )}
+            >
+              <MdOutlineDonutLarge className='h-5 w-5' />
+            </button>
             {searchTarget !== 'text' && (
               <>
                 <span className='bg-base-content/50 mx-2 h-4 w-[0.5px]'></span>

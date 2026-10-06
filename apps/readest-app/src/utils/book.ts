@@ -13,6 +13,44 @@ import { getDirFromLanguage } from './rtl';
 import { code6392to6391, isValidLang, normalizedLangCode } from './lang';
 import { md5 } from './md5';
 
+/** Declared language values that mean "not stated", rather than a real language. */
+const UNKNOWN_LANGUAGES = new Set(['und', 'mul', 'mis', 'zxx']);
+
+/**
+ * Reduce a declared language to its two-letter base ('eng' -> 'en', 'la' -> 'la',
+ * 'en-US' -> 'en'), or '' when it carries no usable information. Both the ISO
+ * 639-1 and 639-2/B spellings appear in book metadata, so both are accepted.
+ */
+const toBaseLanguage = (value?: string | string[] | null): string => {
+  // Metadata languages arrive as either a single value or a list.
+  const declared = Array.isArray(value) ? value[0] : value;
+  const normalized = normalizedLangCode(declared);
+  if (!normalized || UNKNOWN_LANGUAGES.has(normalized)) return '';
+  return isValidLang(normalized) ? code6392to6391(normalized) || normalized : normalized;
+};
+
+/**
+ * Language of a book's text, for the library's language filters. `metadata.language`
+ * is preferred; `primaryLanguage` is the fallback because older imports often left
+ * the metadata empty while still recording it there.
+ */
+export const getBookLanguage = (book: Book): string =>
+  toBaseLanguage(book.metadata?.language) || toBaseLanguage(book.primaryLanguage);
+
+/**
+ * Whether a book counts as English, for the library's "English Only" filter.
+ *
+ * An unknown language counts as English on purpose: nearly every book in a
+ * typical library is English and most records never declared a language, so
+ * treating "unknown" as "not English" would hide most of the shelf the moment the
+ * filter is switched on. Only books positively identified as another language are
+ * filtered out.
+ */
+export const isEnglishBook = (book: Book): boolean => {
+  const language = getBookLanguage(book);
+  return language === '' || language === 'en';
+};
+
 export const getDir = (book: Book) => {
   return `${book.hash}`;
 };

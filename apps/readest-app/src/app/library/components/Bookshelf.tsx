@@ -67,10 +67,16 @@ import {
   parseMemberFilter,
 } from '@/services/household';
 import { splitLibraryOpenIds } from '@/utils/audiobook';
+import { retargetBookFilePath } from '@/services/bookService';
 import {
+  applyBookMoveOutOfFolder,
   applyFolderDissolve,
   applyFolderRename,
+  fileLeafName,
   folderLeafName,
+  folderParentPath,
+  inPlaceRootFor,
+  moveOutFileDestination,
   joinFolderPath,
   nextUntitledFolderPath,
   remapFolderPaths,
@@ -670,6 +676,78 @@ const Bookshelf: React.FC<BookshelfProps> = ({
     [appService, getGroupId, libraryBooks, persistLibraryFolders, remapGroupPaths, setLibrary],
   );
 
+  // Lift one book out of its folder and into the parent, for the common case of a
+  // book filed in the wrong place. The shelf and the disk stay in step: the file
+  // moves up a directory too, so the folder tree the library mirrors keeps matching
+  // what the user sees in their file manager.
+  //
+  // Only files under a read-in-place root are moved. A book the app copied into
+  // its own storage has no folder of the user's to follow, so for those this stays
+  // a library-only regroup (mirroring handleDissolveFolder).
+  const handleMoveOutOfFolder = useCallback(
+    async (book: Book) => {
+      const live = libraryBooks.find((candidate) => candidate.hash === book.hash);
+      const folder = folderLeafName(live?.groupName || '');
+      const parent = folderParentPath(live?.groupName || '');
+      if (!live || !parent) return;
+
+      const from = live.filePath;
+      const to = from ? moveOutFileDestination(from) : null;
+      const settings = useSettingsStore.getState().settings;
+      const inPlaceRoot = from
+        ? inPlaceRootFor(from, settings.externalLibraryFolders ?? [])
+        : undefined;
+      // The destination must stay inside the same root: moving up out of the root
+      // itself would drop the file somewhere the library does not cover.
+      const moveFile =
+        !!from &&
+        !!to &&
+        !!inPlaceRoot &&
+        inPlaceRootFor(to, settings.externalLibraryFolders ?? []) === inPlaceRoot;
+
+      if (moveFile && appService) {
+        try {
+          if (await appService.exists(to!, 'None')) {
+            eventDispatcher.dispatch('toast', {
+              message: _('A file named "{name}" is already in that folder', {
+                name: fileLeafName(to!),
+              }),
+              type: 'error',
+            });
+            return;
+          }
+          // The app's fs layer has no move, so copy then delete the original.
+          // Copying first is what makes this safe: a failure at any point leaves
+          // the book with its file rather than without one.
+          await appService.copyFile(from!, 'None', to!, 'None');
+          await appService.deleteFile(from!, 'None').catch((error) => {
+            // A leftover duplicate is untidy; a missing file is a broken book.
+            console.warn('[library] could not remove the original after moving it', error);
+          });
+        } catch (error) {
+          console.error('[library] failed to move the book file', error);
+          eventDispatcher.dispatch('toast', {
+            message: _('Could not move the book file'),
+            type: 'error',
+          });
+          // Leave the library untouched so the shelf still matches the disk.
+          return;
+        }
+      }
+
+      const moved = applyBookMoveOutOfFolder(live, (path) => getGroupId(path) || path);
+      if (!moved) return;
+      if (moveFile && to) retargetBookFilePath(live, to, appService?.osPlatform);
+      setLibrary([...libraryBooks]);
+      await appService?.saveLibraryBooks(libraryBooks);
+      eventDispatcher.dispatch('toast', {
+        message: _('Moved out of "{folder}"', { folder }),
+        type: 'success',
+      });
+    },
+    [_, appService, getGroupId, libraryBooks, setLibrary],
+  );
+
   const handleRemoveEmptyFolder = useCallback(
     (group: BooksGroup) => {
       removeGroup(group.id);
@@ -1019,10 +1097,34 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   // -> `listContext` identities stable (no full-grid re-render churn).
   const { openBook } = useOpenBook({ setLoading, handleBookDownload });
   const openRecentBook = useCallback((book: Book) => openBook(book), [openBook]);
+  // Carry the live search term into the reader as well, so clicking a result
+  // opens the book with that search already run in its find bar.
   const openSearchResult = useCallback(
-    (book: Book, cfi: string) => openBook(book, cfi, { highlightSearchResult: true }),
-    [openBook],
+    (book: Book, cfi: string) =>
+      openBook(book, cfi, {
+        highlightSearchResult: true,
+        searchQuery: contentSearch?.query,
+        searchConfig: contentSearch?.config,
+      }),
+    [openBook, contentSearch],
   );
+
+  // The book details dialog can link to a related book (a translation of this
+  // one, or the source it was translated from). Resolve the hash against the
+  // live library and hand it to the normal open path, so windowing and
+  // file-availability handling stay in one place.
+  useEffect(() => {
+    const onOpenBookByHash = (event: CustomEvent) => {
+      const hash = (event.detail as { hash?: string } | undefined)?.hash;
+      if (!hash) return;
+      const target = useLibraryStore
+        .getState()
+        .library.find((book) => book.hash === hash && !book.deletedAt);
+      if (target) void openBook(target);
+    };
+    eventDispatcher.on('open-book-by-hash', onOpenBookByHash);
+    return () => eventDispatcher.off('open-book-by-hash', onOpenBookByHash);
+  }, [openBook]);
 
   // Flat recency slice of the whole library, independent of the main shelf's
   // sort/grouping. Built from `visibleBooks` (not the sorted/filtered items).
@@ -1157,6 +1259,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
           setLoading={setLoading}
           toggleSelection={toggleSelection}
           handleGroupBooks={groupSelectedBooks}
+          handleMoveOutOfFolder={handleMoveOutOfFolder}
           handleAssignHousehold={assignSingleBook}
           handleBookUpload={handleBookUpload}
           handleBookDownload={handleBookDownload}
@@ -1193,6 +1296,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
       handleUpdateReadingStatus,
       handleRenameFolder,
       handleDissolveFolder,
+      handleMoveOutOfFolder,
       showTimeRemaining,
     ],
   );

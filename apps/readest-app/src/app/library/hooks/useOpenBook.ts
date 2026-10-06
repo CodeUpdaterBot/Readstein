@@ -78,7 +78,26 @@ export const useOpenBook = ({ setLoading, handleBookDownload }: UseOpenBookOptio
   );
 
   const openBook = useCallback(
-    async (book: Book, cfi?: string, options?: { highlightSearchResult?: boolean }) => {
+    async (
+      book: Book,
+      cfi?: string,
+      options?: {
+        highlightSearchResult?: boolean;
+        /**
+         * Library-wide search term to hand to the reader. Without this the book
+         * opens on the right page but with an empty find bar, so the user has to
+         * retype the term they just searched for.
+         */
+        searchQuery?: string;
+        /** Options the library search ran with, so the reader reproduces it. */
+        searchConfig?: {
+          mode?: string;
+          matchCase?: boolean;
+          matchDiacritics?: boolean;
+          nearbyWords?: number;
+        };
+      },
+    ) => {
       // A streaming audiobook has no local file and no document loader path -
       // it opens in the full-screen player instead of the reader. Short-circuit
       // before any of the file-availability logic below, which assumes a real
@@ -118,6 +137,18 @@ export const useOpenBook = ({ setLoading, handleBookDownload }: UseOpenBookOptio
       const params = new URLSearchParams();
       if (cfi) params.set('cfi', cfi);
       if (cfi && options?.highlightSearchResult) params.set('highlight', 'search');
+      // Opened from a search result: carry the term (and how it was searched) so
+      // the reader opens with the find bar already showing the same matches
+      // instead of an empty one.
+      if (options?.searchQuery) {
+        params.set('q', options.searchQuery);
+        const searchConfig = options.searchConfig;
+        if (searchConfig?.mode) params.set('qmode', searchConfig.mode);
+        if (searchConfig?.matchCase) params.set('qcase', '1');
+        if (searchConfig?.matchDiacritics) params.set('qdiac', '1');
+        if (searchConfig?.nearbyWords != null)
+          params.set('qnear', String(searchConfig.nearbyWords));
+      }
       const queryParams = params.size ? params.toString() : undefined;
       if (appService?.hasWindow && settings.openBookInNewWindow) {
         showReaderWindow(appService, [book.hash], queryParams);

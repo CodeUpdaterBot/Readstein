@@ -542,6 +542,12 @@ export interface BookSearchConfig {
 
 export type LibrarySearchConfig = Omit<BookSearchConfig, 'mode'> & {
   mode: SearchMode | 'fuzzy';
+  /**
+   * Restrict the search to books whose text is English, so a library that also
+   * holds untranslated Latin or German sources can search its English shelf
+   * without them (see `isEnglishBook`).
+   */
+  englishOnly?: boolean;
 };
 
 export type LibrarySearchTarget = 'books' | 'text';
