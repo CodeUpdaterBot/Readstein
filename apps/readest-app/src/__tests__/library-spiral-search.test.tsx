@@ -868,19 +868,26 @@ describe('SpiralSearchView whole-library zoom and phone layout', () => {
     });
   });
 
-  it('walks the timeline on a touch drag, on a phone and on a wide touchscreen', () => {
+  it('walks the timeline on a touch drag, newer downwards and older upwards', () => {
     const drag = (container: HTMLElement, from: number, to: number) => {
       const dial = container.querySelector('[aria-label="Year dial"]') as HTMLElement;
       fireEvent.touchStart(dial, { touches: [{ clientY: from }] });
       fireEvent.touchMove(dial, { touches: [{ clientY: to }] });
       fireEvent.touchEnd(dial, { touches: [] });
     };
+    const yearOf = (label: string) => Number(label.match(/\d{3,4}/)?.[0] ?? 0);
 
+    // Direction matters, and the check has to be on the year rather than "it changed":
+    // touch reads the opposite way to the wheel, and a test that only asserted *movement*
+    // let the two get swapped without noticing.
     phone(() => {
       const { container } = renderWith(SPAN);
-      const before = selectedLabel(container);
-      drag(container, 400, 330); // upward: towards newer years
-      expect(selectedLabel(container)).not.toBe(before);
+      const start = yearOf(selectedLabel(container));
+      expect(start).toBeGreaterThan(0);
+      drag(container, 400, 330); // upward: towards older years on touch
+      expect(yearOf(selectedLabel(container))).toBeLessThan(start);
+      drag(container, 330, 400); // downward: back towards newer
+      expect(yearOf(selectedLabel(container))).toBeGreaterThanOrEqual(start);
     });
 
     // A tablet in landscape: wide enough for the desktop layout, and still no wheel.
@@ -894,9 +901,9 @@ describe('SpiralSearchView whole-library zoom and phone layout', () => {
     try {
       const { container } = renderWith(SPAN);
       expect(container.firstElementChild?.className).toContain('flex-row');
-      const before = selectedLabel(container);
+      const start = yearOf(selectedLabel(container));
       drag(container, 400, 330);
-      expect(selectedLabel(container)).not.toBe(before);
+      expect(yearOf(selectedLabel(container))).toBeLessThan(start);
     } finally {
       window.matchMedia = original;
     }

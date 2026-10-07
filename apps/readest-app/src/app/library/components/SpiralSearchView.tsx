@@ -44,7 +44,8 @@ import {
  * list. The dial is concentric: the hub holds the query, the first ring is the
  * years the current results occupy, the next ring the works in the selected year,
  * and the panel to the right the passages that actually matched. Every ring is
- * scrollable — up for newer, down for older — so the whole collection can be
+ * scrollable — up for newer, down for older with a wheel, and the other way round
+ * for a touch drag — so the whole collection can be
  * walked like a combination lock without typing anything.
  *
  * It reuses `searchLibraryBooks` exactly as the shelf does, so results stream in
@@ -245,6 +246,16 @@ const ARC_PRESETS = {
 
 /** Width below which the three-column layout cannot work and we stack instead. */
 const COMPACT_WIDTH = 820;
+
+/**
+ * Touch-first input: a phone, a tablet, or anything without a wheel to spin. Touch and the
+ * wheel read *opposite* ways on purpose — see the touch drag handler — so the dial's hint
+ * text has to follow whichever input the device actually has, or it would lie.
+ */
+const hasCoarsePointer = (): boolean =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(pointer: coarse)').matches;
 /**
  * A phone shows the works as a list that scrolls up and down, never as a sideways
  * strip — but only a few cards, or the sheet buries the dial it belongs to. Past
@@ -651,6 +662,11 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
   // arc is a fraction of its height, so an unconstrained tall dial would be wider
   // than the screen.
   const compact = size.width < COMPACT_WIDTH;
+  // A narrow window on a desktop still has a wheel, so a compact layout is not by itself
+  // proof of touch. Either signal means the drag gesture is the one in play, which matters
+  // because the drag and the wheel read in opposite directions.
+  const [coarsePointer] = useState(hasCoarsePointer);
+  const touchFirst = compact || coarsePointer;
 
   // The row the dial lives in, measured: it is what the dial sizes itself against on a
   // phone, because that row is whatever the resizable tray leaves.
@@ -757,9 +773,12 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
     return () => node.removeEventListener('wheel', onWheel);
   }, [bandBooks.length, compact, stepWork]);
 
-  // Touch has no wheel. Dragging the dial walks the timeline (up for newer — the same
-  // direction as the wheel), and the − / + pair in the hub replaces ctrl+scroll for
-  // zooming.
+  // Touch has no wheel. Dragging the dial walks the timeline, and the − / + pair in the hub
+  // replaces ctrl+scroll for zooming.
+  //
+  // Touch reads *up for older, down for newer* — deliberately the opposite of the wheel. A
+  // finger drags the ring the way content moves under it, whereas a wheel spins it; reusing
+  // the wheel's direction here read backwards to anyone actually holding the phone.
   //
   // Gated on the *input device*, not on the layout. A tablet in landscape is wide
   // enough for the desktop arrangement and still has no wheel; keying this off
@@ -767,9 +786,7 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
   useEffect(() => {
     const node = dialRef.current;
     if (!node) return;
-    const coarsePointer =
-      typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
-    if (!compact && !coarsePointer) return;
+    if (!touchFirst) return;
 
     // Distance between the two fingers, for the pinch.
     const span = (touches: TouchList) => {
@@ -819,7 +836,9 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
       }
       if (Math.abs(dy) < 24) return;
       lastY = y;
-      stepBand(dy < 0 ? 1 : -1);
+      // Up for older, down for newer on touch — a finger drags the ring the way the content
+      // moves under it, where a wheel spins it the other way (see the wheel handler above).
+      stepBand(dy < 0 ? -1 : 1);
       event.preventDefault();
     };
 
@@ -837,7 +856,7 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
       node.removeEventListener('touchend', onTouchEnd);
       node.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, [compact, bandCount, stepBand]);
+  }, [touchFirst, bandCount, stepBand]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1449,10 +1468,12 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
             <span className='flex items-center gap-1'>
               <MdArrowUpward className='h-3 w-3' /> {compact ? _('Drag up') : _('Scroll up')}
             </span>
-            <span className='ps-4'>{_('for newer')}</span>
+            {/* Touch drags the ring the way content moves under a finger, so on a phone the
+                two labels read the opposite way round from the wheel's. */}
+            <span className='ps-4'>{touchFirst ? _('for older') : _('for newer')}</span>
           </div>
           <div className='text-base-content pointer-events-none absolute bottom-4 left-4 flex flex-col items-start gap-0.5 text-[10px] font-medium tracking-[0.16em] uppercase'>
-            <span className='ps-4'>{_('for older')}</span>
+            <span className='ps-4'>{touchFirst ? _('for newer') : _('for older')}</span>
             <span className='flex items-center gap-1'>
               <MdArrowDownward className='h-3 w-3' /> {compact ? _('Drag down') : _('Scroll down')}
             </span>
