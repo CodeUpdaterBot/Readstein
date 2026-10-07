@@ -23,6 +23,19 @@ export type LanHomeBookSummary = {
   hasConfig: boolean;
   /** False when library.json lists the book but the file is missing on the PC. */
   hasFile?: boolean;
+  /** Bare publication year, mirroring metadata.published. Drives the timeline dial. */
+  published?: number | null;
+  /** One entry per component of a composite work, mirroring metadata.publishedDates. */
+  publishedDates?: number[];
+  /**
+   * The book's whole metadata object, mirrored so a synced device can do everything the
+   * desktop can (timeline dial, language filter, series, publisher…). Named fields were
+   * tried first and the publication years were missed; mirror the record instead.
+   */
+  metadata?: Record<string, unknown>;
+  groupId?: string | null;
+  groupName?: string | null;
+  createdAt?: number;
   /** Partial MD5 of the host cover.png — phones re-pull when this differs. */
   coverHash?: string | null;
   /** cover.png mtime in ms, used when the host has no coverHash yet. */

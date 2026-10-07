@@ -1303,9 +1303,11 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
                       )}
                       data-testid='dial-scale'
                     >
-                      {bandWidthYears > 0
-                        ? `${plural(bands.length, '{{count}} band', '{{count}} bands')} | ${bandWidthYears}yr`
-                        : plural(bands.length, '{{count}} band', '{{count}} bands')}
+                      {bands.length === 0
+                        ? _('No years yet')
+                        : bandWidthYears > 0
+                          ? `${plural(bands.length, '{{count}} band', '{{count}} bands')} | ${bandWidthYears}yr`
+                          : plural(bands.length, '{{count}} band', '{{count}} bands')}
                     </div>
                     <span className='text-base-content/85 text-[9px] font-medium tracking-[0.06em] uppercase'>
                       {compact ? _('Pinch to zoom') : _('Ctrl + scroll to zoom')}
@@ -1511,7 +1513,9 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
                     : '{{count}} works from {{range}}',
                   { count: bandBooks.length, range: band.label },
                 )
-              : _('No works')}
+              : bands.length === 0
+                ? _('No years')
+                : _('No works')}
           </div>
           <div
             ref={worksRef}
@@ -1527,9 +1531,13 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
           >
             {visibleWorks.length === 0 && (
               <p className='text-base-content/50 max-w-xs text-sm'>
-                {textSearchActive && phase === 'searching'
-                  ? _('Scanning your books…')
-                  : _('Nothing here yet.')}
+                {bands.length === 0
+                  ? _(
+                      'This library has no publication years yet, so there is nothing to plot. Sync with your PC, or add a year in a book’s details.',
+                    )
+                  : textSearchActive && phase === 'searching'
+                    ? _('Scanning your books…')
+                    : _('Nothing here yet.')}
               </p>
             )}
             {visibleWorks.map((item, index) => {

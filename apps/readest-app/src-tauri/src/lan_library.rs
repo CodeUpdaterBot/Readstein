@@ -219,6 +219,29 @@ fn summarize(books_dir: &Path, book: &Value) -> Option<Value> {
             })
         });
     let raw_title = book.get("title").and_then(|v| v.as_str()).unwrap_or("");
+    // The timeline dial bands books by year, so the year data has to cross the wire with
+    // the catalog. Without it a synced phone has no years at all, which renders as
+    // "0 bands" and no tiles — the desktop looked fine only because its books are local.
+    // `published` is a bare year and `publishedDates` holds one entry per component of a
+    // composite work; both are written as numbers but tolerate a stringified year.
+    let metadata = book.get("metadata");
+    let year_of = |value: Option<&serde_json::Value>| -> Option<i64> {
+        value.and_then(|v| {
+            v.as_i64()
+                .or_else(|| v.as_str().and_then(|s| s.trim().parse::<i64>().ok()))
+        })
+    };
+    let published = year_of(metadata.and_then(|m| m.get("published")));
+    let published_dates = metadata
+        .and_then(|m| m.get("publishedDates"))
+        .and_then(|v| v.as_array())
+        .map(|dates| {
+            dates
+                .iter()
+                .filter_map(|d| year_of(Some(d)))
+                .collect::<Vec<i64>>()
+        })
+        .unwrap_or_default();
     Some(json!({
         "hash": hash,
         "title": strip_temp_import_prefix(raw_title),
@@ -235,6 +258,17 @@ fn summarize(books_dir: &Path, book: &Value) -> Option<Value> {
         "coverUpdatedAt": book.get("coverUpdatedAt").and_then(|v| v.as_u64()),
         "metadataUpdatedAt": book.get("metadataUpdatedAt").and_then(|v| v.as_u64()),
         "tags": book.get("tags").cloned().unwrap_or(json!([])),
+        "published": published,
+        "publishedDates": published_dates,
+        // Mirror the whole metadata object, not selected fields: the desktop row is the
+        // source of truth for the catalog, and enumerating fields is how the publication
+        // years went missing in the first place (a synced phone had no years, so the
+        // timeline dial rendered zero bands and no tiles). Anything the desktop can show
+        // about a book should reach the device.
+        "metadata": book.get("metadata").cloned().unwrap_or(json!({})),
+        "groupId": book.get("groupId").and_then(|v| v.as_str()),
+        "groupName": book.get("groupName").and_then(|v| v.as_str()),
+        "createdAt": book.get("createdAt").and_then(|v| v.as_u64()),
     }))
 }
 
@@ -681,6 +715,7 @@ mod tests {
             "metadataUpdatedAt": 100,
             "coverUpdatedAt": 101,
             "tags": ["history"],
+            "metadata": { "published": 1584, "publishedDates": [1584, "1610"] },
         });
         let summary = summarize(&tmp, &book).expect("hash is enough to summarize");
         assert_eq!(summary["title"], "Edited Title");
@@ -691,6 +726,15 @@ mod tests {
         assert_eq!(summary["coverUpdatedAt"], 101);
         assert_eq!(summary["metadataUpdatedAt"], 100);
         assert_eq!(summary["tags"], json!(["history"]));
+        // The timeline dial needs these or a synced phone renders "0 bands" and no tiles.
+        assert_eq!(summary["published"], 1584);
+        assert_eq!(summary["publishedDates"], json!([1584, 1610]));
+
+        // A book with no year data reports none rather than lying about it.
+        let bare = json!({ "hash": "def67890", "title": "No Year" });
+        let bare_summary = summarize(&tmp, &bare).expect("hash is enough to summarize");
+        assert_eq!(bare_summary["published"], serde_json::Value::Null);
+        assert_eq!(bare_summary["publishedDates"], json!([]));
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

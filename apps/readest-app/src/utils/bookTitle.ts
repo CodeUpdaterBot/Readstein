@@ -158,6 +158,10 @@ export type HostLibraryMetadata = {
   title?: string;
   author?: string;
   tags?: string[];
+  /** Whole metadata object from the host row, mirrored so features that depend on it work. */
+  metadata?: Record<string, unknown>;
+  groupId?: string | null;
+  groupName?: string | null;
 };
 
 /**
@@ -192,6 +196,43 @@ export const applyHostLibraryMetadata = (book: Book, item: HostLibraryMetadata):
       book.tags = next;
       changed = true;
     }
+  }
+
+  // Mirror the rest of the metadata object wholesale. This is the difference between a
+  // device that can merely list books and one that can do everything the desktop can: the
+  // timeline dial needs `published` / `publishedDates`, the English-only filter needs
+  // `language`, and series / publisher / subject travel the same way. Naming fields one by
+  // one is how the publication years went missing — a synced phone had none, so the dial
+  // showed "0 bands" and no tiles while the desktop looked perfect.
+  // Compared by value first so a re-sync of an unchanged book does not look like an edit.
+  const hostMetadata = item.metadata as Partial<NonNullable<Book['metadata']>> | undefined;
+  if (hostMetadata) {
+    // Create the object if the local record lacks one, rather than skipping: a book
+    // without metadata is exactly the book that would silently never get its years.
+    if (!book.metadata) book.metadata = {} as NonNullable<Book['metadata']>;
+    const local = book.metadata as Record<string, unknown>;
+    for (const [key, value] of Object.entries(hostMetadata)) {
+      if (value === undefined || value === null) continue;
+      let differs: boolean;
+      try {
+        differs = JSON.stringify(local[key]) !== JSON.stringify(value);
+      } catch {
+        differs = true;
+      }
+      if (differs) {
+        local[key] = value;
+        changed = true;
+      }
+    }
+  }
+
+  if (item.groupId != null && book.groupId !== item.groupId) {
+    book.groupId = item.groupId;
+    book.groupName = item.groupName ?? book.groupName;
+    changed = true;
+  } else if (item.groupName != null && book.groupName !== item.groupName) {
+    book.groupName = item.groupName;
+    changed = true;
   }
 
   if (changed) {
