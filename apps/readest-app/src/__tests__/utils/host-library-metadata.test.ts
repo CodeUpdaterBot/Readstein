@@ -76,4 +76,29 @@ describe('host library metadata mirror', () => {
     expect((book as { groupId?: string }).groupId).toBe('abc1234');
     expect((book as { groupName?: string }).groupName).toBe('Translations');
   });
+
+  it('carries the subject and genre tags to the device', () => {
+    // Tags are the library's own vocabulary (192 of 193 books here carry 3-12 of them) and
+    // the shelf filters on them, so they have to travel with the catalog.
+    const book = makeBook({ tags: ['occultism'] });
+    const changed = applyHostLibraryMetadata(book, {
+      tags: ['occultism', 'theology', 'printed book'],
+    });
+    expect(changed).toBe(true);
+    expect((book as { tags: string[] }).tags).toEqual(['occultism', 'theology', 'printed book']);
+  });
+
+  it('leaves the device’s tags alone when the PC sends none', () => {
+    const book = makeBook({ tags: ['theology'] });
+    const changed = applyHostLibraryMetadata(book, {});
+    expect(changed).toBe(false);
+    expect((book as { tags: string[] }).tags).toEqual(['theology']);
+  });
+
+  it('lets the PC clear tags, since it owns the catalog', () => {
+    const book = makeBook({ tags: ['theology'] });
+    const changed = applyHostLibraryMetadata(book, { tags: [] });
+    expect(changed).toBe(true);
+    expect((book as { tags: string[] }).tags).toEqual([]);
+  });
 });
