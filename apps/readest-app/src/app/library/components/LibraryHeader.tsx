@@ -200,9 +200,10 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
                 <IoMdCloseCircle className='h-4 w-4' />
               </button>
             )}
-            <span className='bg-base-content/50 mx-2 h-4 w-[0.5px]'></span>
             {/* Spiral (radial) view of the same search: available with or without
-                a query, so a search already in the box can be re-seen as a dial. */}
+                a query, so a search already in the box can be re-seen as a dial. The
+                cluster spaces itself with the group's own space-x — no divider rules,
+                which only added noise either side of the dial. */}
             <button
               type='button'
               aria-pressed={spiralMode}
@@ -218,7 +219,6 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
             </button>
             {searchTarget !== 'text' && (
               <>
-                <span className='bg-base-content/50 mx-2 h-4 w-[0.5px]'></span>
                 <Dropdown
                   label={_('Import Books')}
                   className={clsx(
