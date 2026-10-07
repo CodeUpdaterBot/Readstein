@@ -14,6 +14,7 @@ import {
   stopLanHomeHost,
 } from '@/services/lanHome/native';
 import LanHomeSyncDialog from './LanHomeSyncDialog';
+import { isLanHomeSyncing, startLanHomeSync, subscribeLanHomeSync } from '@/services/lanHome/sync';
 import {
   LAN_HOME_DEFAULT_PORT,
   newLanHomeToken,
@@ -178,8 +179,17 @@ const LanHomeForm: React.FC = () => {
   };
 
   const [syncOpen, setSyncOpen] = useState(false);
+  const [syncing, setSyncing] = useState(() => isLanHomeSyncing());
+
+  // The run itself lives in the sync service, so this only mirrors its state — closing the
+  // dialog or leaving this screen does not stop it.
+  useEffect(() => subscribeLanHomeSync((s) => setSyncing(s.running)), []);
 
   const openSync = () => {
+    if (syncing) {
+      setSyncOpen(true);
+      return;
+    }
     const host = (lan.clientHost ?? '').trim();
     const token = (lan.clientToken || lan.token || '').trim();
     if (!host || !token) {
@@ -191,6 +201,14 @@ const LanHomeForm: React.FC = () => {
     }
     void persist({ clientEnabled: true });
     setSyncOpen(true);
+    void startLanHomeSync({
+      host,
+      port: lan.clientPort || LAN_HOME_DEFAULT_PORT,
+      token,
+      appService: appService!,
+      settings: useSettingsStore.getState().settings,
+      isLoggedIn: !!user,
+    });
   };
 
   return (
@@ -305,7 +323,7 @@ const LanHomeForm: React.FC = () => {
           onClick={openSync}
           data-testid='lan-home-sync-now'
         >
-          {_('Sync now')}
+          {syncing ? _('View sync progress') : _('Sync now')}
         </button>
       </div>
 
@@ -363,22 +381,10 @@ const LanHomeForm: React.FC = () => {
         </li>
       </Tips>
 
-      {syncOpen && appService && (
+      {syncOpen && (
         <LanHomeSyncDialog
           host={(lan.clientHost ?? '').trim()}
           port={lan.clientPort || LAN_HOME_DEFAULT_PORT}
-          appService={appService}
-          settings={settings}
-          isLoggedIn={!!user}
-          onFinished={(result) => {
-            void persist({ lastSyncedAt: Date.now() });
-            if (result && result.errors.length) {
-              eventDispatcher.dispatch('toast', {
-                type: 'warning',
-                message: result.errors[0]!,
-              });
-            }
-          }}
           onClose={() => setSyncOpen(false)}
         />
       )}

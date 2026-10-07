@@ -57,9 +57,11 @@ const hostItem = (hash: string, title: string, extra: Record<string, unknown> = 
   ...extra,
 });
 
+const saveLibraryBooks = vi.fn(async (_books?: unknown) => undefined);
+
 const appService = {
   loadLibraryBooks: vi.fn(async () => library),
-  saveLibraryBooks: vi.fn(async () => undefined),
+  saveLibraryBooks,
   exists: vi.fn(async () => false),
   createDir: vi.fn(async () => undefined),
   resolveFilePath: vi.fn(async (p: string) => `C:/cache/${p}`),
@@ -93,7 +95,12 @@ beforeEach(() => {
     complete: true,
     books: [hostItem('h1', 'Brand New'), hostItem('h2', 'Already Here')],
   });
-  ingestFile.mockImplementation(async () => book('h1', 'Brand New'));
+  // bookService.importBook pushes into the array it is handed, so mirror that here.
+  ingestFile.mockImplementation(async (opts: { books?: AnyBook[] }) => {
+    const imported = book('h1', 'Brand New');
+    opts.books?.push(imported);
+    return imported;
+  });
   applyHostLibraryMetadata.mockReturnValue(true);
   getConfig.mockResolvedValue(null);
   library = [book('h2', 'Already Here'), book('h3', 'Deleted On PC')];
@@ -145,5 +152,33 @@ describe('home library sync progress', () => {
     const { result } = await runSync();
     expect(result.removed).toBe(0);
     expect(result.errors.join(' ')).toMatch(/no books were removed/i);
+  });
+
+  it('saves the shelf as books arrive, so an interrupted sync keeps them', async () => {
+    // The bytes are on disk as soon as an import returns. Holding the library write until
+    // the end of the loop is what made a cancelled run download a hundred books and show
+    // none of them, so the write has to happen during the run.
+    let savesWhenFirstBookLanded = -1;
+    await syncFromLanHome({
+      host: '192.168.1.107',
+      port: 17432,
+      token: 'TEST2345',
+      appService,
+      settings: {} as never,
+      isLoggedIn: false,
+      onProgress: (p) => {
+        if (p.stage === 'transfer' && p.current === 1 && savesWhenFirstBookLanded < 0) {
+          savesWhenFirstBookLanded = saveLibraryBooks.mock.calls.length;
+        }
+      },
+    });
+    expect(savesWhenFirstBookLanded).toBeGreaterThan(0);
+  });
+
+  it('persists the imported book itself, not just the pre-existing shelf', async () => {
+    await runSync();
+    const lastSaved = saveLibraryBooks.mock.calls.at(-1)?.[0] as unknown as AnyBook[];
+    expect(Array.isArray(lastSaved)).toBe(true);
+    expect(lastSaved.some((b) => b['hash'] === 'h1')).toBe(true);
   });
 });

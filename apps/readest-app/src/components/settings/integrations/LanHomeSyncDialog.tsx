@@ -1,38 +1,21 @@
 import clsx from 'clsx';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MdCheckCircle, MdError, MdSync } from 'react-icons/md';
 import { useTranslation } from '@/hooks/useTranslation';
-import type { AppService } from '@/types/system';
-import type { SystemSettings } from '@/types/settings';
 import {
-  syncFromLanHome,
-  type LanHomeSyncCounts,
-  type LanHomeSyncProgress,
-  type LanHomeSyncResult,
+  getLanHomeSyncState,
+  subscribeLanHomeSync,
+  type LanHomeSyncState,
 } from '@/services/lanHome/sync';
-import { LanHomeError } from '@/services/lanHome/client';
 
 type StepKey = 'connect' | 'compare' | 'transfer';
 type StepState = 'pending' | 'active' | 'ok' | 'fail';
-
-type Step = {
-  key: StepKey;
-  label: string;
-  state: StepState;
-  note?: string;
-};
 
 const STEP_LABELS: Record<StepKey, string> = {
   connect: 'Connecting to the PC',
   compare: 'Comparing libraries',
   transfer: 'Transferring books',
 };
-
-const initialSteps = (): Step[] => [
-  { key: 'connect', label: STEP_LABELS.connect, state: 'pending' },
-  { key: 'compare', label: STEP_LABELS.compare, state: 'pending' },
-  { key: 'transfer', label: STEP_LABELS.transfer, state: 'pending' },
-];
 
 const StepIcon: React.FC<{ state: StepState }> = ({ state }) => {
   if (state === 'ok') return <MdCheckCircle className='text-success h-5 w-5 shrink-0' />;
@@ -42,136 +25,82 @@ const StepIcon: React.FC<{ state: StepState }> = ({ state }) => {
   return <MdSync className='text-base-content/25 h-5 w-5 shrink-0' />;
 };
 
+/** Where a failure happened, inferred from the last stage the run reported. */
+const failedStep = (state: LanHomeSyncState): StepKey | null => {
+  if (!state.error) return null;
+  const stage = state.progress?.stage;
+  if (stage === 'compare') return 'compare';
+  if (stage === 'transfer') return 'transfer';
+  return 'connect';
+};
+
+const stepsFor = (state: LanHomeSyncState): { key: StepKey; state: StepState; note?: string }[] => {
+  const stage = state.progress?.stage;
+  const failed = failedStep(state);
+  const reached = (target: StepKey): boolean => {
+    if (state.result) return true;
+    if (target === 'connect')
+      return stage === 'compare' || stage === 'transfer' || stage === 'done';
+    if (target === 'compare') return stage === 'transfer' || stage === 'done';
+    return stage === 'done';
+  };
+  const stateOf = (key: StepKey): StepState => {
+    if (failed === key) return 'fail';
+    if (reached(key)) return 'ok';
+    // Only the first unfinished step is the one running.
+    const order: StepKey[] = ['connect', 'compare', 'transfer'];
+    const firstPending = order.find((k) => !reached(k));
+    return firstPending === key ? 'active' : 'pending';
+  };
+
+  const total = state.progress?.total ?? 0;
+  return [
+    { key: 'connect', state: stateOf('connect') },
+    {
+      key: 'compare',
+      state: stateOf('compare'),
+      note: total > 0 ? `${total} books to match` : undefined,
+    },
+    {
+      key: 'transfer',
+      state: stateOf('transfer'),
+      note:
+        state.result &&
+        state.result.imported + state.result.titlesUpdated + state.result.coversUpdated === 0
+          ? 'Everything is already in sync'
+          : undefined,
+    },
+  ];
+};
+
 export type LanHomeSyncDialogProps = {
   host: string;
   port: number;
-  appService: AppService;
-  settings: SystemSettings;
-  isLoggedIn: boolean;
-  /** Reports the result once the run ends; the dialog stays open to show it. */
-  onFinished: (result: LanHomeSyncResult | null) => void;
+  /** Closing the window never cancels the run — it is a background job. */
   onClose: () => void;
 };
 
 /**
- * The sync, narratable. A transfer of a large shelf takes minutes, so it reports
- * what it is doing in three steps and shows a real bar — an unlabelled spinner on
- * a job this size just looks broken, which is exactly how a silent failure reads.
+ * A window onto the running sync, not the thing running it.
+ *
+ * The job lives at module scope (`startLanHomeSync`), so this can be closed, reopened, or
+ * left behind while the user reads something else, and it will still show the live state
+ * when they come back.
  */
-const LanHomeSyncDialog: React.FC<LanHomeSyncDialogProps> = ({
-  host,
-  port,
-  appService,
-  settings,
-  isLoggedIn,
-  onFinished,
-  onClose,
-}) => {
+const LanHomeSyncDialog: React.FC<LanHomeSyncDialogProps> = ({ host, port, onClose }) => {
   const _ = useTranslation();
-  const [steps, setSteps] = useState<Step[]>(initialSteps);
-  const [progress, setProgress] = useState<LanHomeSyncProgress | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
-  const [counts, setCounts] = useState<LanHomeSyncCounts | null>(null);
-  const [hostName, setHostName] = useState('');
-  const started = useRef(false);
+  const [state, setState] = useState<LanHomeSyncState>(() => getLanHomeSyncState());
 
-  const setStep = useCallback((key: StepKey, state: StepState, note?: string) => {
-    setSteps((prev) =>
-      prev.map((s) => (s.key === key ? { ...s, state, note: note ?? s.note } : s)),
-    );
-  }, []);
+  useEffect(() => subscribeLanHomeSync(setState), []);
 
-  useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-
-    const run = async () => {
-      try {
-        const result = await syncFromLanHome({
-          host,
-          port,
-          token: settings.lanHome?.clientToken || settings.lanHome?.token || '',
-          appService,
-          settings,
-          isLoggedIn,
-          onProgress: (p) => {
-            setProgress(p);
-            if (p.hostName) setHostName(p.hostName);
-            if (p.stage === 'connect') {
-              setStep('connect', 'active');
-            } else if (p.stage === 'compare') {
-              setStep('connect', 'ok');
-              setStep('compare', 'active');
-            } else if (p.stage === 'transfer') {
-              setStep('connect', 'ok');
-              setStep(
-                'compare',
-                'ok',
-                p.total ? _('{{n}} books to match', { n: p.total }) : undefined,
-              );
-              setStep('transfer', 'active');
-            } else if (p.stage === 'done') {
-              setStep('transfer', 'ok');
-            }
-          },
-        });
-        setCounts({
-          imported: result.imported,
-          skipped: result.skipped,
-          progressPulled: result.progressPulled,
-          progressPushed: result.progressPushed,
-          titlesUpdated: result.titlesUpdated,
-          coversUpdated: result.coversUpdated,
-          removed: result.removed,
-        });
-        const empty =
-          result.imported === 0 &&
-          result.titlesUpdated === 0 &&
-          result.coversUpdated === 0 &&
-          result.removed === 0;
-        setProgress((p) => ({ ...(p ?? { stage: 'done' }), stage: 'done' }));
-        if (empty) setStep('transfer', 'ok', _('Everything is already in sync'));
-        else setStep('transfer', 'ok');
-        onFinished(result);
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        setFailure(message);
-        // Attribute the failure to the step that was running.
-        const where: StepKey =
-          progress?.stage === 'compare'
-            ? 'compare'
-            : progress?.stage === 'transfer'
-              ? 'transfer'
-              : 'connect';
-        if (where === 'connect') {
-          setStep('connect', 'fail', message);
-        } else if (where === 'compare') {
-          setStep('connect', 'ok');
-          setStep('compare', 'fail', message);
-        } else {
-          setStep('transfer', 'fail', message);
-        }
-        onFinished(null);
-      }
-    };
-    void run();
-    // Intentionally runs once per opened dialog.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const total = progress?.total ?? 0;
-  const current = progress?.current ?? 0;
+  const steps = stepsFor(state);
+  const total = state.progress?.total ?? 0;
+  const current = state.progress?.current ?? 0;
   const percent =
-    total > 0 ? Math.min(100, Math.round((current / total) * 100)) : failure ? 0 : 100;
-  const running = !counts && !failure;
-
-  const summary = counts
-    ? [
-        { label: _('imported'), value: counts.imported },
-        { label: _('updated'), value: counts.titlesUpdated + counts.coversUpdated },
-        { label: _('removed'), value: counts.removed },
-      ]
-    : [];
+    total > 0 ? Math.min(100, Math.round((current / total) * 100)) : state.result ? 100 : 0;
+  const label =
+    state.hostName && state.hostName !== 'localhost' ? state.hostName : `${host}:${port}`;
+  const counts = state.result;
 
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4'>
@@ -184,9 +113,7 @@ const LanHomeSyncDialog: React.FC<LanHomeSyncDialogProps> = ({
       >
         <div className='border-base-200 border-b px-5 py-4'>
           <h3 className='text-base font-semibold'>{_('Home Library sync')}</h3>
-          <p className='text-base-content/60 mt-0.5 text-[0.85em]'>
-            {hostName && hostName !== 'localhost' ? hostName : `${host}:${port}`}
-          </p>
+          <p className='text-base-content/60 mt-0.5 text-[0.85em]'>{label}</p>
         </div>
 
         <ul className='space-y-3 px-5 py-4'>
@@ -201,15 +128,10 @@ const LanHomeSyncDialog: React.FC<LanHomeSyncDialogProps> = ({
                     step.state === 'fail' && 'text-error',
                   )}
                 >
-                  {_(step.label)}
+                  {_(STEP_LABELS[step.key])}
                 </span>
                 {step.note && (
-                  <span
-                    className={clsx(
-                      'mt-0.5 block text-[0.85em]',
-                      step.state === 'fail' ? 'text-error/90' : 'text-base-content/55',
-                    )}
-                  >
+                  <span className='text-base-content/55 mt-0.5 block text-[0.85em]'>
                     {step.note}
                   </span>
                 )}
@@ -218,7 +140,7 @@ const LanHomeSyncDialog: React.FC<LanHomeSyncDialogProps> = ({
           ))}
         </ul>
 
-        {!failure && (total > 0 || running) && (
+        {(total > 0 || state.running) && !state.error && (
           <div className='px-5 pb-4'>
             <div className='bg-base-300 h-2 w-full overflow-hidden rounded-full'>
               <div
@@ -228,7 +150,7 @@ const LanHomeSyncDialog: React.FC<LanHomeSyncDialogProps> = ({
               />
             </div>
             <div className='text-base-content/60 mt-2 flex justify-between text-[0.85em]'>
-              <span className='min-w-0 truncate pr-3'>{progress?.label ?? ''}</span>
+              <span className='min-w-0 truncate pr-3'>{state.progress?.label ?? ''}</span>
               <span className='shrink-0 tabular-nums'>
                 {total > 0 ? `${current} / ${total}` : ''}
               </span>
@@ -236,12 +158,12 @@ const LanHomeSyncDialog: React.FC<LanHomeSyncDialogProps> = ({
           </div>
         )}
 
-        {failure && (
+        {state.error && (
           <p
             className='text-error px-5 pb-4 text-[0.9em] leading-snug'
             data-testid='lan-home-sync-error'
           >
-            {failure}
+            {state.error}
           </p>
         )}
 
@@ -249,32 +171,31 @@ const LanHomeSyncDialog: React.FC<LanHomeSyncDialogProps> = ({
           <div className='border-base-200 border-t px-5 py-4'>
             <p className='text-sm font-medium'>{_('Sync complete')}</p>
             <ul className='mt-2 space-y-1'>
-              {summary.map((s) => (
-                <li key={s.label} className='flex justify-between text-[0.9em]'>
-                  <span className='text-base-content/70'>{s.label}</span>
-                  <span className='tabular-nums'>{s.value}</span>
+              {[
+                { label: _('imported'), value: counts.imported },
+                { label: _('updated'), value: counts.titlesUpdated + counts.coversUpdated },
+                { label: _('removed'), value: counts.removed },
+              ].map((row) => (
+                <li key={row.label} className='flex justify-between text-[0.9em]'>
+                  <span className='text-base-content/70'>{row.label}</span>
+                  <span className='tabular-nums'>{row.value}</span>
                 </li>
               ))}
-              {counts.progressPulled + counts.progressPushed > 0 && (
-                <li className='flex justify-between text-[0.9em]'>
-                  <span className='text-base-content/70'>{_('reading progress')}</span>
-                  <span className='tabular-nums'>
-                    {counts.progressPulled + counts.progressPushed}
-                  </span>
-                </li>
-              )}
             </ul>
           </div>
         )}
 
-        <div className='border-base-200 flex justify-end border-t px-5 py-3'>
+        <div className='border-base-200 flex items-center justify-between gap-3 border-t px-5 py-3'>
+          <span className='text-base-content/55 text-[0.8em] leading-snug'>
+            {state.running ? _('Keeps syncing if you close this window') : ''}
+          </span>
           <button
             type='button'
-            className='btn btn-contrast h-10 min-h-10 rounded-lg border-0 px-5 text-sm font-medium'
-            disabled={running}
+            className='btn btn-contrast h-10 min-h-10 shrink-0 rounded-lg border-0 px-5 text-sm font-medium'
             onClick={onClose}
+            data-testid='lan-home-sync-close'
           >
-            {running ? _('Syncing…') : _('Close')}
+            {state.running ? _('Continue in background') : _('Close')}
           </button>
         </div>
       </div>
@@ -283,5 +204,3 @@ const LanHomeSyncDialog: React.FC<LanHomeSyncDialogProps> = ({
 };
 
 export default LanHomeSyncDialog;
-
-export const isLanHomeSyncFailure = (e: unknown): e is LanHomeError => e instanceof LanHomeError;

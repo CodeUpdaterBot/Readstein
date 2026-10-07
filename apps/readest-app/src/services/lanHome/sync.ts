@@ -32,6 +32,7 @@ import {
 } from './client';
 import { lanHomeBookCoverUrl, type LanHomeBookSummary } from './protocol';
 import { useLibraryStore } from '@/store/libraryStore';
+import { eventDispatcher } from '@/utils/event';
 
 export type LanHomeSyncResult = {
   imported: number;
@@ -71,6 +72,13 @@ export type LanHomeSyncOptions = {
   isLoggedIn: boolean;
   onProgress?: (progress: LanHomeSyncProgress) => void;
 };
+
+/**
+ * How often the library is written while a sync runs. Throttled rather than per-book so a
+ * 200-book run is not 200 disk writes, but short enough that an interruption costs almost
+ * nothing.
+ */
+export const LAN_HOME_FLUSH_MS = 1500;
 
 const emptyResult = (): LanHomeSyncResult => ({
   imported: 0,
@@ -294,70 +302,99 @@ export const syncFromLanHome = async (opts: LanHomeSyncOptions): Promise<LanHome
     counts: countsOf(result),
   });
 
-  for (let i = 0; i < plan.length; i += 1) {
-    const entry = plan[i]!;
-    const label =
-      entry.kind === 'remove'
-        ? entry.book.title || ''
-        : entry.kind === 'import'
-          ? entry.item.title || entry.item.filename || ''
-          : entry.item.title || entry.book.title || '';
-    onProgress?.({
-      stage: 'transfer',
-      hostName: hello.name,
-      total: plan.length,
-      current: i,
-      label,
-      counts: countsOf(result),
-    });
+  // Persist as we go. An import has already copied the book into Books/<hash>/ by the time
+  // it returns, so holding the library write until the end of the loop meant an interrupted
+  // run (or a backgrounded/killed app) kept the bytes and lost every record — the phone got
+  // hot downloading a hundred books and showed none of them. Flushing on a short throttle
+  // keeps an interrupted run's progress, resumes naturally on the next run, and lets the
+  // shelf fill in while the sync is still going.
+  let dirty = false;
+  let lastFlush = 0;
+  const flush = async (force = false): Promise<void> => {
+    if (!dirty) return;
+    const now = Date.now();
+    if (!force && now - lastFlush < LAN_HOME_FLUSH_MS) return;
+    lastFlush = now;
+    dirty = false;
+    await ctx.appService.saveLibraryBooks(library);
+    setLibrary([...library]);
+  };
 
-    try {
-      if (entry.kind === 'import') {
-        const imported = await importHostBook(ctx, library, entry.item, result);
-        if (imported) {
-          byHash.set(imported.hash, imported);
-          if (applyHostLibraryMetadata(imported, entry.item)) result.titlesUpdated += 1;
-          if (entry.item.hasCover && (await pullHostCover(ctx, imported, entry.item))) {
+  try {
+    for (let i = 0; i < plan.length; i += 1) {
+      const entry = plan[i]!;
+      const label =
+        entry.kind === 'remove'
+          ? entry.book.title || ''
+          : entry.kind === 'import'
+            ? entry.item.title || entry.item.filename || ''
+            : entry.item.title || entry.book.title || '';
+      onProgress?.({
+        stage: 'transfer',
+        hostName: hello.name,
+        total: plan.length,
+        current: i,
+        label,
+        counts: countsOf(result),
+      });
+
+      try {
+        if (entry.kind === 'import') {
+          const imported = await importHostBook(ctx, library, entry.item, result);
+          if (imported) {
+            byHash.set(imported.hash, imported);
+            if (applyHostLibraryMetadata(imported, entry.item)) result.titlesUpdated += 1;
+            if (entry.item.hasCover && (await pullHostCover(ctx, imported, entry.item))) {
+              result.coversUpdated += 1;
+            }
+          }
+        } else if (entry.kind === 'refresh') {
+          const { book, item } = entry;
+          if (entry.mergeProgress) await mergeReadingProgress(ctx, book, item, result);
+          if (applyHostLibraryMetadata(book, item)) result.titlesUpdated += 1;
+          if (entry.pullCover && (await pullHostCover(ctx, book, item))) {
             result.coversUpdated += 1;
           }
+          result.skipped += 1;
+        } else {
+          await removeBook(ctx, entry.book);
+          result.removed += 1;
         }
-      } else if (entry.kind === 'refresh') {
-        const { book, item } = entry;
-        if (entry.mergeProgress) await mergeReadingProgress(ctx, book, item, result);
-        if (applyHostLibraryMetadata(book, item)) result.titlesUpdated += 1;
-        if (entry.pullCover && (await pullHostCover(ctx, book, item))) {
-          result.coversUpdated += 1;
-        }
-        result.skipped += 1;
-      } else {
-        await removeBook(ctx, entry.book);
-        result.removed += 1;
+      } catch (e) {
+        const who = entry.kind === 'remove' ? entry.book.title : entry.item?.title;
+        result.errors.push(`${who || 'book'}: ${e instanceof Error ? e.message : String(e)}`);
       }
-    } catch (e) {
-      const who = entry.kind === 'remove' ? entry.book.title : entry.item?.title;
-      result.errors.push(`${who || 'book'}: ${e instanceof Error ? e.message : String(e)}`);
+
+      // This entry has already touched the shelf, so write it down before moving on.
+      dirty = true;
+      await flush();
+
+      onProgress?.({
+        stage: 'transfer',
+        hostName: hello.name,
+        total: plan.length,
+        current: i + 1,
+        label,
+        counts: countsOf(result),
+      });
     }
 
-    onProgress?.({
-      stage: 'transfer',
-      hostName: hello.name,
-      total: plan.length,
-      current: i + 1,
-      label,
-      counts: countsOf(result),
-    });
-  }
-
-  // An unreadable or empty host catalog must never look like "the PC has no books",
-  // or a sync would wipe this device's shelf.
-  if (remote.complete === false || remote.books.length === 0) {
-    if (library.some((b) => !b.deletedAt && isLanHomeMirrorableBook(b))) {
-      result.errors.push('The PC listing was empty or unreadable; no books were removed.');
+    // An unreadable or empty host catalog must never look like "the PC has no books",
+    // or a sync would wipe this device's shelf.
+    if (remote.complete === false || remote.books.length === 0) {
+      if (library.some((b) => !b.deletedAt && isLanHomeMirrorableBook(b))) {
+        result.errors.push('The PC listing was empty or unreadable; no books were removed.');
+      }
+    }
+  } finally {
+    // A run that failed or was cut short still keeps everything it managed to import.
+    try {
+      await flush(true);
+    } catch {
+      /* keep the original failure rather than masking it with a save error */
     }
   }
 
-  await ctx.appService.saveLibraryBooks(library);
-  setLibrary(library);
   onProgress?.({
     stage: 'done',
     hostName: hello.name,
@@ -370,3 +407,96 @@ export const syncFromLanHome = async (opts: LanHomeSyncOptions): Promise<LanHome
 
 export const bookCountHint = (library: Book[]): number =>
   library.filter((b) => !b.deletedAt).length;
+
+/**
+ * The sync is a background job, not a dialog.
+ *
+ * It lives at module scope so that closing the integrations panel, moving to another
+ * screen, or backgrounding the app does not cancel it, and so the dialog can be reopened
+ * at any moment to see where the run got to. Combined with the incremental library writes
+ * above, an interrupted run keeps every book it already imported.
+ */
+export type LanHomeSyncState = {
+  running: boolean;
+  hostName: string;
+  progress: LanHomeSyncProgress | null;
+  result: LanHomeSyncResult | null;
+  error: string | null;
+  startedAt: number | null;
+  finishedAt: number | null;
+};
+
+const idleState = (): LanHomeSyncState => ({
+  running: false,
+  hostName: '',
+  progress: null,
+  result: null,
+  error: null,
+  startedAt: null,
+  finishedAt: null,
+});
+
+let syncState: LanHomeSyncState = idleState();
+let inFlight: Promise<LanHomeSyncResult | null> | null = null;
+const listeners = new Set<(state: LanHomeSyncState) => void>();
+
+const publish = (patch: Partial<LanHomeSyncState>): void => {
+  syncState = { ...syncState, ...patch };
+  for (const listener of listeners) listener(syncState);
+};
+
+export const getLanHomeSyncState = (): LanHomeSyncState => syncState;
+
+export const subscribeLanHomeSync = (listener: (state: LanHomeSyncState) => void): (() => void) => {
+  listeners.add(listener);
+  listener(syncState);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
+/** True while a run is in flight, so callers can avoid starting a second one. */
+export const isLanHomeSyncing = (): boolean => syncState.running;
+
+export const startLanHomeSync = (opts: LanHomeSyncOptions): Promise<LanHomeSyncResult | null> => {
+  // One run at a time: joining the run already going is more useful than racing it.
+  if (inFlight) return inFlight;
+
+  publish({ ...idleState(), running: true, startedAt: Date.now() });
+  inFlight = (async () => {
+    try {
+      const result = await syncFromLanHome({
+        ...opts,
+        onProgress: (progress) => {
+          publish({ progress, hostName: progress.hostName ?? syncState.hostName });
+          opts.onProgress?.(progress);
+        },
+      });
+      publish({ running: false, result, finishedAt: Date.now() });
+      // Say so wherever the user is — they may have walked away from the settings page.
+      const moved = result.imported + result.titlesUpdated + result.coversUpdated + result.removed;
+      if (result.errors.length) {
+        eventDispatcher.dispatch('toast', { type: 'warning', message: result.errors[0]! });
+      } else if (moved > 0) {
+        eventDispatcher.dispatch('toast', {
+          type: 'info',
+          message: `Home Library sync finished: ${result.imported} added, ${result.titlesUpdated} updated, ${result.coversUpdated} covers, ${result.removed} removed.`,
+        });
+      } else {
+        eventDispatcher.dispatch('toast', {
+          type: 'info',
+          message: 'Home Library sync finished: everything is already in sync.',
+        });
+      }
+      return result;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      publish({ running: false, error: message, finishedAt: Date.now() });
+      eventDispatcher.dispatch('toast', { type: 'error', message });
+      return null;
+    } finally {
+      inFlight = null;
+    }
+  })();
+  return inFlight;
+};
