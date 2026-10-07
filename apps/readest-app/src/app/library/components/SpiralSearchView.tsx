@@ -259,9 +259,6 @@ const GLYPH_WIDTH = 0.68;
 const TRAY_MIN_PX = 128;
 const TRAY_DEFAULT_SHARE = 0.34;
 const TRAY_MAX_SHARE = 0.72;
-/** Two works in front of the user and two passages below them; the rest scrolls. */
-const TRAY_WORKS_PX = 118;
-
 /**
  * Dial geometry, all derived from the measured height so the arc keeps its shape
  * at any window size. The arc's centre sits off the left edge: that is what makes
@@ -1497,7 +1494,7 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
         <div
           className={clsx(
             'flex min-w-0 flex-col',
-            compact ? 'w-full shrink-0 gap-1 px-3' : 'h-full flex-1 justify-center ps-4 pe-6',
+            compact ? 'min-h-0 w-full flex-1 gap-1 px-3' : 'h-full flex-1 justify-center ps-4 pe-6',
           )}
           data-testid='works-sheet'
         >
@@ -1520,10 +1517,13 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
             ref={worksRef}
             className={clsx(
               'flex',
-              compact ? 'flex-col gap-1.5 overflow-y-auto px-1 pb-2' : 'flex-col gap-2',
+              // Works and passages *share* the tray instead of one owning a fixed
+              // height: at the default that lands on about two rows each, and dragging
+              // the tray up fills the room with more results rather than blank space.
+              compact
+                ? 'min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-1 pb-2'
+                : 'flex-col gap-2',
             )}
-            // Exactly two cards in sight on a phone; the rest scrolls inside the tray.
-            style={compact ? { maxHeight: TRAY_WORKS_PX } : undefined}
           >
             {visibleWorks.length === 0 && (
               <p className='text-base-content/50 max-w-xs text-sm'>

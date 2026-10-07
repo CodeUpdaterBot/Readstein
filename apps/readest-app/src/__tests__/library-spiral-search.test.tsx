@@ -852,9 +852,11 @@ describe('SpiralSearchView whole-library zoom and phone layout', () => {
       const list = many.container.querySelector(
         '[data-testid="works-sheet"] .overflow-y-auto',
       ) as HTMLElement;
-      expect(list.style.maxHeight).toBe('118px');
-      // Capped, not fixed: a single match leaves no blank half-row behind it.
+      // Shares the tray rather than owning two fixed rows, so a taller tray fills with
+      // more results and a single match leaves no blank half-row behind it.
+      expect(list.style.maxHeight).toBe('');
       expect(list.style.height).toBe('');
+      expect(list.className).toContain('flex-1');
 
       // Dragging the handle up grows the tray by the drag, and the dial gives up the
       // room rather than anything below jumping.
