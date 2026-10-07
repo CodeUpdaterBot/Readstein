@@ -13,14 +13,19 @@ import {
   startLanHomeHost,
   stopLanHomeHost,
 } from '@/services/lanHome/native';
-import { lanHomeHello } from '@/services/lanHome/client';
-import { syncFromLanHome } from '@/services/lanHome/sync';
+import LanHomeSyncDialog from './LanHomeSyncDialog';
 import {
   LAN_HOME_DEFAULT_PORT,
   newLanHomeToken,
   type LanHomePeer,
 } from '@/services/lanHome/protocol';
 import { BoxedList, SettingsInput, SettingsRow, SettingsSwitchRow, Tips } from '../primitives';
+
+/**
+ * Almost every home router hands out 192.168.1.x, so start the address there and
+ * leave the caret at the end: the only thing the user then types is the last group.
+ */
+const LAN_HOME_ADDRESS_PREFIX = '192.168.1.';
 
 const primaryButtonClass = clsx(
   'btn btn-contrast',
@@ -85,6 +90,16 @@ const LanHomeForm: React.FC = () => {
     void refreshHostStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lan.hostEnabled, tauri]);
+
+  // A blank address is the one field nobody can guess, and 192.168.1.x is what almost
+  // every home router hands out, so start it there: the caret lands after the prefix and
+  // the user types only the last group. They can still clear or replace it entirely.
+  useEffect(() => {
+    if (isDesktop || !tauri) return;
+    if ((lan.clientHost ?? '').trim()) return;
+    void persist({ clientHost: LAN_HOME_ADDRESS_PREFIX });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDesktop, tauri, lan.clientHost]);
 
   const startHost = async () => {
     if (!tauri) {
@@ -162,9 +177,10 @@ const LanHomeForm: React.FC = () => {
     });
   };
 
-  const testAndSync = async () => {
-    const host = lan.clientHost?.trim();
-    const port = lan.clientPort || LAN_HOME_DEFAULT_PORT;
+  const [syncOpen, setSyncOpen] = useState(false);
+
+  const openSync = () => {
+    const host = (lan.clientHost ?? '').trim();
     const token = (lan.clientToken || lan.token || '').trim();
     if (!host || !token) {
       eventDispatcher.dispatch('toast', {
@@ -173,42 +189,8 @@ const LanHomeForm: React.FC = () => {
       });
       return;
     }
-    setBusy(true);
-    try {
-      const hello = await lanHomeHello(host, port, token);
-      const app = await envConfig.getAppService();
-      const result = await syncFromLanHome({
-        host,
-        port,
-        token,
-        appService: app,
-        settings: useSettingsStore.getState().settings,
-        isLoggedIn: !!user,
-      });
-      await persist({ lastSyncedAt: Date.now(), clientEnabled: true });
-      const extra = result.errors[0] ? ` ${result.errors[0]}` : '';
-      eventDispatcher.dispatch('toast', {
-        type: result.errors.length ? 'warning' : 'info',
-        message: _(
-          'Synced with {{name}}: {{n}} added, {{t}} updated, {{c}} covers, {{d}} removed.{{extra}}',
-          {
-            name: hello.name,
-            n: result.imported,
-            t: result.titlesUpdated,
-            c: result.coversUpdated,
-            d: result.removed,
-            extra,
-          },
-        ),
-      });
-    } catch (e) {
-      eventDispatcher.dispatch('toast', {
-        type: 'error',
-        message: e instanceof Error ? e.message : String(e),
-      });
-    } finally {
-      setBusy(false);
-    }
+    void persist({ clientEnabled: true });
+    setSyncOpen(true);
   };
 
   return (
@@ -236,11 +218,15 @@ const LanHomeForm: React.FC = () => {
           </SettingsRow>
           <SettingsRow label={_('Port')}>
             <SettingsInput
-              type='number'
+              type='text'
+              inputMode='numeric'
+              pattern='[0-9]*'
               value={String(lan.hostPort || LAN_HOME_DEFAULT_PORT)}
-              onChange={(e) =>
-                void persist({ hostPort: Number(e.target.value) || LAN_HOME_DEFAULT_PORT })
-              }
+              className='w-20 min-w-0 max-w-[34%] tabular-nums'
+              onChange={(e) => {
+                const digits = e.target.value.replaceAll(/[^0-9]/g, '').slice(0, 5);
+                void persist({ hostPort: digits ? Number(digits) : LAN_HOME_DEFAULT_PORT });
+              }}
             />
           </SettingsRow>
         </BoxedList>
@@ -258,23 +244,45 @@ const LanHomeForm: React.FC = () => {
         <SettingsRow label={_('PC address')}>
           <SettingsInput
             value={lan.clientHost ?? ''}
-            placeholder='192.168.1.10'
-            onChange={(e) => void persist({ clientHost: e.target.value })}
+            placeholder={LAN_HOME_ADDRESS_PREFIX + '10'}
+            inputMode='decimal'
+            autoComplete='off'
+            spellCheck={false}
+            className='w-40 min-w-0 max-w-[52%] tabular-nums'
+            onChange={(e) => void persist({ clientHost: e.target.value.trim() })}
+            // Prefilled with the prefix, so the caret belongs after it: the user only
+            // ever types the last group and should not have to move the cursor first.
+            onFocus={(e) => {
+              const el = e.currentTarget;
+              const at = el.value.length;
+              requestAnimationFrame(() => el.setSelectionRange(at, at));
+            }}
           />
         </SettingsRow>
         <SettingsRow label={_('Port')}>
           <SettingsInput
-            type='number'
+            type='text'
+            inputMode='numeric'
+            pattern='[0-9]*'
             value={String(lan.clientPort || LAN_HOME_DEFAULT_PORT)}
-            onChange={(e) =>
-              void persist({ clientPort: Number(e.target.value) || LAN_HOME_DEFAULT_PORT })
-            }
+            // `min-w-0` matters: a flex item defaults to min-width:auto, so without it the
+            // input refuses to shrink below its intrinsic width and the row overflows the
+            // card — which is what pushed the port digits off the right edge on phones.
+            className='w-20 min-w-0 max-w-[34%] tabular-nums'
+            onChange={(e) => {
+              const digits = e.target.value.replaceAll(/[^0-9]/g, '').slice(0, 5);
+              void persist({ clientPort: digits ? Number(digits) : LAN_HOME_DEFAULT_PORT });
+            }}
           />
         </SettingsRow>
         <SettingsRow label={_('Pairing code')}>
           <SettingsInput
             value={lan.clientToken ?? ''}
             placeholder={_('Code shown on the PC')}
+            autoComplete='off'
+            autoCapitalize='characters'
+            spellCheck={false}
+            className='w-40 min-w-0 max-w-[52%] uppercase'
             onChange={(e) => void persist({ clientToken: e.target.value.toUpperCase() })}
           />
         </SettingsRow>
@@ -293,11 +301,11 @@ const LanHomeForm: React.FC = () => {
         )}
         <button
           type='button'
-          className={clsx(primaryButtonClass, busy && 'opacity-60')}
-          onClick={() => void testAndSync()}
-          disabled={busy}
+          className={primaryButtonClass}
+          onClick={openSync}
+          data-testid='lan-home-sync-now'
         >
-          {busy ? _('Syncing…') : _('Sync now')}
+          {_('Sync now')}
         </button>
       </div>
 
@@ -325,7 +333,7 @@ const LanHomeForm: React.FC = () => {
 
       <BoxedList>
         <SettingsSwitchRow
-          label={_('Silence Readest Cloud storage notices')}
+          label={_('Silence cloud storage notices')}
           description={_(
             'Hide plan-quota alerts. A large local library is not an error when you sync over Home Library.',
           )}
@@ -354,6 +362,26 @@ const LanHomeForm: React.FC = () => {
           )}
         </li>
       </Tips>
+
+      {syncOpen && appService && (
+        <LanHomeSyncDialog
+          host={(lan.clientHost ?? '').trim()}
+          port={lan.clientPort || LAN_HOME_DEFAULT_PORT}
+          appService={appService}
+          settings={settings}
+          isLoggedIn={!!user}
+          onFinished={(result) => {
+            void persist({ lastSyncedAt: Date.now() });
+            if (result && result.errors.length) {
+              eventDispatcher.dispatch('toast', {
+                type: 'warning',
+                message: result.errors[0]!,
+              });
+            }
+          }}
+          onClose={() => setSyncOpen(false)}
+        />
+      )}
     </div>
   );
 };

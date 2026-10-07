@@ -247,7 +247,9 @@ const IntegrationsPanel: React.FC = () => {
           parentLabel={_('Integrations')}
           currentLabel={_('Home Library')}
           description={_(
-            'Use this PC as the library server for phones on the same Wi-Fi. Books stay on your computer — there is no Readest Cloud limit.',
+            appService?.isDesktopApp
+              ? 'Use this PC as the library server for phones on the same Wi-Fi. Books stay on your computer — there is no Readest Cloud limit.'
+              : 'Connect this device to the Home Library on your PC, over the same Wi-Fi. Books stay on your computer — there is no Readest Cloud limit.',
           )}
           onBack={() => setSubPage(null)}
         />
@@ -590,6 +592,28 @@ const IntegrationsPanel: React.FC = () => {
         </p>
       </div>
 
+      {isTauriAppPlatform() && (
+        <div className='w-full' data-setting-id='settings.integrations.homeLibrary'>
+          <SectionTitle className='mb-2'>{_('Home Library')}</SectionTitle>
+          <div className='card eink-bordered border-base-200 bg-base-100 overflow-hidden border'>
+            <div className='divide-base-200 divide-y'>
+              <IntegrationRow
+                icon={RiHomeWifiLine}
+                title={_('This PC / local network')}
+                status={
+                  settings.lanHome?.hostEnabled
+                    ? _('Sharing on this network')
+                    : settings.lanHome?.clientEnabled
+                      ? _('Connected to a home PC')
+                      : _('Off')
+                }
+                onClick={() => setSubPage('lan-home')}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className='w-full' data-setting-id='settings.integrations.sync'>
         <SectionTitle className='mb-2'>{_('Reading Sync')}</SectionTitle>
         <div className='card eink-bordered border-base-200 bg-base-100 overflow-hidden border'>
@@ -750,28 +774,6 @@ const IntegrationsPanel: React.FC = () => {
           </div>
         )}
       </div>
-
-      {isTauriAppPlatform() && (
-        <div className='w-full' data-setting-id='settings.integrations.homeLibrary'>
-          <SectionTitle className='mb-2'>{_('Home Library')}</SectionTitle>
-          <div className='card eink-bordered border-base-200 bg-base-100 overflow-hidden border'>
-            <div className='divide-base-200 divide-y'>
-              <IntegrationRow
-                icon={RiHomeWifiLine}
-                title={_('This PC / local network')}
-                status={
-                  settings.lanHome?.hostEnabled
-                    ? _('Sharing on this network')
-                    : settings.lanHome?.clientEnabled
-                      ? _('Connected to a home PC')
-                      : _('Off')
-                }
-                onClick={() => setSubPage('lan-home')}
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className='w-full' data-setting-id='settings.integrations.catalogs'>
         <SectionTitle className='mb-2'>{_('Content Sources')}</SectionTitle>
