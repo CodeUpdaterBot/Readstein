@@ -903,6 +903,18 @@ export const getStyles = (
     viewSettings.writingMode!,
     viewSettings.vertical!,
   );
+  // A translation file sets a work's own language beside the English. With the
+  // 'Show <language>' switch off, the source column (marked in the parsed document
+  // as .source-text, with .translation-label on the now-redundant 'English:'
+  // heading and .editorial-note on the translator's confidence notes) is hidden
+  // here, in the stylesheet the renderer applies to every document — so sections
+  // loaded later are hidden too, with no per-document work and nothing removed from
+  // the text (a reading position taken before the toggle still resolves afterwards).
+  const sourceLanguageStyles =
+    viewSettings.showSourceLanguage === false
+      ? '.source-text, .translation-label, .editorial-note { display: none !important; }'
+      : '';
+
   const paragraphLayoutStyles = viewSettings.useBookLayout
     ? ''
     : getParagraphLayoutStyles(
@@ -957,7 +969,7 @@ export const getStyles = (
   // the footnote aside's border show as a stray horizontal line (#4438). Keep it
   // ahead of the inlined custom `@font-face` rules.
   const epubNamespace = `@namespace epub "http://www.idpf.org/2007/ops";`;
-  return `${epubNamespace}\n${customFontFaces}\n${pageLayoutStyles}\n${paragraphLayoutStyles}\n${fontStyles}\n${colorStyles}\n${translationStyles}\n${warichuStyles}\n${rubyStyles}\n${userStylesheet}`;
+  return `${epubNamespace}\n${customFontFaces}\n${pageLayoutStyles}\n${paragraphLayoutStyles}\n${fontStyles}\n${colorStyles}\n${translationStyles}\n${warichuStyles}\n${rubyStyles}\n${userStylesheet}${sourceLanguageStyles ? `\n${sourceLanguageStyles}` : ''}`;
 };
 
 // Build a CSS chunk of `@font-face` rules for the given user custom

@@ -14,7 +14,13 @@ import { NodeDatabaseService } from '@/services/database/nodeDatabaseService';
 import { migrate } from '@/services/database/migrate';
 import { getMigrations } from '@/services/database/migrations';
 import { BookFileNotFoundError } from '@/services/errors';
-import type { Book, BookContent, LibrarySearchConfig } from '@/types/book';
+import type {
+  Book,
+  BookContent,
+  LibrarySearchConfig,
+  LibrarySearchMatch,
+  SearchResultLocator,
+} from '@/types/book';
 import type { DatabaseService } from '@/types/database';
 import type { AppService } from '@/types/system';
 
@@ -585,5 +591,124 @@ describe('searchLibraryBooks', () => {
     const nearbyResolved = await resolveSearchResultCfis(session, book, nearby);
     expect(nearbyResolved[0]?.cfis?.length).toBe(2);
     await session.close();
+  });
+});
+
+/**
+ * A translation file sets each page's original beside its English, so a query that
+ * happens to be a Latin word matches the Latin column as well. The switch on the
+ * library header ('Include original source language in search?') turns that off:
+ * the same work is then searched through its English alone, and the matches, the
+ * snippets and the count all come from the translation.
+ */
+describe('searching a translation without its source language', () => {
+  const book = makeBook('twocolumn', 'Two Column Work');
+
+  const twoColumnFile = () =>
+    makeFile(
+      [
+        '# Page 1',
+        '',
+        '**Latin:**',
+        '',
+        '> caelum et terra, the whole of it.',
+        '',
+        '**English:**',
+        '',
+        'Heaven and earth, the whole of it.',
+        '',
+      ].join('\n'),
+    );
+
+  const collect = async (
+    service: ReturnType<typeof makeService>,
+    query: string,
+    overrides: Partial<LibrarySearchConfig>,
+  ) => {
+    const matches: LibrarySearchMatch[] = [];
+    let count = 0;
+    for await (const event of searchLibraryBooks(service, [book], query, {
+      config: { ...config, ...overrides },
+    })) {
+      if (event.type === 'result') matches.push(...event.result.subitems);
+      if (event.type === 'completed') count = event.matchCount;
+    }
+    return { matches, count };
+  };
+
+  it('finds a source-language word by default', async () => {
+    const service = makeService(new Map([['twocolumn', twoColumnFile()]]));
+    const { matches, count } = await collect(service, 'caelum', {});
+
+    expect(count).toBe(1);
+    expect(matches[0]!.excerpt.match).toBe('caelum');
+    // Every locator taken without the switch says nothing about which text it is
+    // in — that IS the whole text, which is how every locator behaved before.
+    expect(matches[0]!.locator.excludeSource).toBeUndefined();
+  });
+
+  it('leaves the source-language word out when the switch is off', async () => {
+    const service = makeService(new Map([['twocolumn', twoColumnFile()]]));
+    const { matches, count } = await collect(service, 'caelum', {
+      includeSourceLanguage: false,
+    });
+
+    expect(count).toBe(0);
+    expect(matches).toEqual([]);
+  });
+
+  it('still finds the English, and says which text its offsets are in', async () => {
+    const service = makeService(new Map([['twocolumn', twoColumnFile()]]));
+    const english = await collect(service, 'heaven', { includeSourceLanguage: false });
+
+    expect(english.count).toBe(1);
+    expect(english.matches[0]!.excerpt.match).toBe('Heaven');
+    expect(english.matches[0]!.locator.excludeSource).toBe(true);
+
+    // The same word on the second search comes out of the cached index, so the
+    // English copy has to have survived the round-trip through search.db.
+    const cached = await collect(service, 'heaven', { includeSourceLanguage: false });
+    expect(cached.count).toBe(1);
+    expect(cached.matches[0]!.locator.excludeSource).toBe(true);
+  });
+
+  it('resolves a CFI for an English hit taken with the source left out', async () => {
+    // The crux of the whole option: the offsets are into the section WITHOUT its
+    // source column, so the resolution has to walk the section the same way. Get
+    // this wrong and the result opens on unrelated words rather than failing.
+    const service = makeService(new Map([['twocolumn', twoColumnFile()]]));
+    const session = createLibrarySearchSession(service);
+    const locators: SearchResultLocator[] = [];
+    for await (const event of searchLibraryBooks(service, [book], 'earth', {
+      config: { ...config, includeSourceLanguage: false },
+      session,
+    })) {
+      if (event.type === 'result') locators.push(...event.result.subitems.map((m) => m.locator));
+    }
+    expect(locators).toHaveLength(1);
+    expect(locators[0]!.excludeSource).toBe(true);
+
+    const resolved = await resolveSearchResultCfi(session, book, locators[0]!);
+    expect(resolved).toBeTruthy();
+    await session.close();
+  });
+
+  it('leaves a book with no source column entirely alone', async () => {
+    const plain = makeBook('plain', 'Plain Work');
+    const service = makeService(
+      new Map([['plain', makeFile('# A chapter\nA needle appears here.')]]),
+    );
+    const search = async (overrides: Partial<LibrarySearchConfig>) => {
+      const matches: LibrarySearchMatch[] = [];
+      for await (const event of searchLibraryBooks(service, [plain], 'needle', {
+        config: { ...config, ...overrides },
+      })) {
+        if (event.type === 'result') matches.push(...event.result.subitems);
+      }
+      return matches;
+    };
+
+    expect(await search({})).toHaveLength(1);
+    expect(await search({ includeSourceLanguage: false })).toHaveLength(1);
   });
 });

@@ -35,7 +35,6 @@ import BookCoverViewer, { useBookCoverViewer } from '@/components/BookCoverViewe
 import Dropdown from '../Dropdown';
 import MenuItem from '../MenuItem';
 
-
 /**
  * Render one dated component of a work. The numeric years are the searchable
  * value, so they lead; `label` only appears when it says something the numbers
@@ -544,6 +543,19 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
             </div>
           )}
         </div>
+        {metadata?.translationNote && (
+          /*
+            The translation's own provenance, kept as a small sub-description below the
+            Description rather than inside it: readers are speculative about bias and
+            process, so how the English was made is stated plainly and apart from what the
+            work is. Muted, smaller type behind a hairline rule, with its own spacing.
+          */
+          <div className='metadata-translation-note border-base-300/70 px-4 py-3 border-t'>
+            <p className='text-neutral-content/70 text-xs leading-relaxed'>
+              {metadata.translationNote}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

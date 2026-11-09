@@ -55,7 +55,7 @@ const LibrarySearchOptionsMenu: React.FC<LibrarySearchOptionsMenuProps> = ({
   // reader sidebar's SearchOptions menu.
   const labelIndent = `${iconSize + 16}px`;
   const update = (
-    key: 'matchCase' | 'matchDiacritics' | 'englishOnly' | 'nearbyWords',
+    key: 'matchCase' | 'matchDiacritics' | 'englishOnly' | 'includeSourceLanguage' | 'nearbyWords',
     value: boolean | number,
   ) => {
     onConfigChange({ ...config, [key]: value });
@@ -145,6 +145,14 @@ const LibrarySearchOptionsMenu: React.FC<LibrarySearchOptionsMenuProps> = ({
         label={_('English Only')}
         isActive={!!config.englishOnly}
         onClick={() => update('englishOnly', !config.englishOnly)}
+      />
+      {/* The same switch the header carries, for a window too narrow to show its
+          label. Left on, a translation file is searched as it reads (source
+          column and all); off, its English alone. */}
+      <Option
+        label={_('Include original source language in search?')}
+        isActive={config.includeSourceLanguage !== false}
+        onClick={() => update('includeSourceLanguage', config.includeSourceLanguage === false)}
       />
     </div>
   );

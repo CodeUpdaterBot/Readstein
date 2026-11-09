@@ -185,6 +185,18 @@ const migrations: Record<SchemaType, MigrationEntry[]> = {
         );
       `,
     },
+    {
+      // The same section text with the work's original source column removed —
+      // the 'English only' search option matches and snippets against this.
+      // NULL when the section has no source column, so the full text stands in
+      // (COALESCE at read time), exactly as `folded` does when folding changes
+      // nothing. Bumping SEARCH_INDEX_VERSION rebuilds existing indexes.
+      name: '2026110801_library_search_source_free',
+      sql: `
+        ALTER TABLE search_sections ADD COLUMN text_en TEXT;
+        ALTER TABLE search_sections ADD COLUMN folded_en TEXT;
+      `,
+    },
   ],
   reedy: [
     {

@@ -167,6 +167,9 @@ const getLibrarySearchConfig = (
     matchCase: searchParams?.get('matchCase') === 'true',
     matchDiacritics: searchParams?.get('matchDiacritics') === 'true',
     englishOnly: searchParams?.get('englishOnly') === 'true',
+    // Default true: searching a translation file the way it reads is the long-
+    // standing behaviour, and the switch exists only to get out of it.
+    includeSourceLanguage: searchParams?.get('includeSourceLanguage') !== 'false',
     nearbyWords:
       Number.isFinite(nearbyParam) && nearbyParam > 0 ? nearbyParam : DEFAULT_NEARBY_WORDS,
   };
@@ -687,6 +690,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       'matchCase',
       'matchDiacritics',
       'englishOnly',
+      'includeSourceLanguage',
       'nearby',
       'spiral',
     ]) {
@@ -1872,6 +1876,9 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     else params.delete('matchDiacritics');
     if (config.englishOnly) params.set('englishOnly', 'true');
     else params.delete('englishOnly');
+    // Written only when off, so the default URL stays exactly what it was.
+    if (config.includeSourceLanguage === false) params.set('includeSourceLanguage', 'false');
+    else params.delete('includeSourceLanguage');
     if (config.mode === 'nearby-words' && config.nearbyWords !== DEFAULT_NEARBY_WORDS) {
       params.set('nearby', String(config.nearbyWords));
     } else {

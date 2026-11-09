@@ -274,6 +274,38 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
           </div>
         ) : (
           <div className='flex h-full items-center gap-x-2 sm:gap-x-4'>
+            {/* The original source language in full-text results. Left on, a
+                translation file is searched as it reads — Latin column and all —
+                which is the right default: the source is in the book, and a reader
+                is entitled to find it. Turned off, the same work is searched
+                through its English alone, so the two-column works stop burying
+                their English hits under pages of Latin. It sits here rather than
+                only in the search options because it is what a reader reaches for
+                at the moment the results are unusable. */}
+            {searchTarget === 'text' && (
+              <label
+                className='text-base-content/60 flex cursor-pointer items-center gap-x-2'
+                title={_('Include original source language in search?')}
+              >
+                <span className='hidden text-xs whitespace-nowrap select-none lg:inline'>
+                  {_('Include original source language in search?')}
+                </span>
+                <input
+                  type='checkbox'
+                  role='switch'
+                  aria-checked={searchConfig.includeSourceLanguage !== false}
+                  aria-label={_('Include original source language in search?')}
+                  className='toggle toggle-sm'
+                  checked={searchConfig.includeSourceLanguage !== false}
+                  onChange={(event) =>
+                    onSearchConfigChange({
+                      ...searchConfig,
+                      includeSourceLanguage: event.target.checked,
+                    })
+                  }
+                />
+              </label>
+            )}
             <Dropdown
               label={_('View Menu')}
               className='exclude-title-bar-mousedown dropdown-bottom dropdown-end'

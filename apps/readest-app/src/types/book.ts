@@ -248,6 +248,14 @@ export interface BookLayout {
   scrolled: boolean;
   scrolledDirection: 'vertical' | 'horizontal';
   webtoonMode: boolean;
+  /**
+   * Show the work's source language beside its translation (default: true).
+   *
+   * Hiding it turns the book into a plain reading copy of the English, which is what a
+   * reader who only wants the translation is asking for. It is a view setting, like
+   * scrolled mode, so it is remembered per book.
+   */
+  showSourceLanguage?: boolean;
   noContinuousScroll: boolean;
   disableClick: boolean;
   disableSwipe: boolean;
@@ -548,6 +556,20 @@ export type LibrarySearchConfig = Omit<BookSearchConfig, 'mode'> & {
    * without them (see `isEnglishBook`).
    */
   englishOnly?: boolean;
+  /**
+   * Search a translated work's original source column as well as its English
+   * (default: true — everything that is in the book).
+   *
+   * A translation file sets the Latin (or German, or Greek) page beside the
+   * English one, so a query that happens to be a Latin word matches every page
+   * that prints it *and* every page whose English rendering needs it. That is the
+   * right default — the source is in the book and a reader is entitled to find it
+   * — but on a long two-column work it can bury the English hits under pages of
+   * Latin. Turned off, such a work is searched through its English text
+   * only: the matches, the snippets and the count all come from the translation,
+   * and the reader's place is still resolved against the full text underneath.
+   */
+  includeSourceLanguage?: boolean;
 };
 
 export type LibrarySearchTarget = 'books' | 'text';
@@ -576,6 +598,15 @@ export interface SearchResultLocator {
   end: number;
   // fuzzy/nearby: matched sub-spans within [start, end)
   runs?: { start: number; end: number }[];
+  /**
+   * The offsets are into the section's SOURCE-FREE text rather than its whole
+   * text — the search was run with `includeSourceLanguage` off, and this section
+   * carries a source column. Resolution has to walk the section with the same
+   * node filter the search used (see resolveSearchResultCfis), or the CFI lands
+   * on the wrong words. Absent means the whole text, which is every locator
+   * taken before this option existed.
+   */
+  excludeSource?: boolean;
 }
 
 export interface LibrarySearchMatch {

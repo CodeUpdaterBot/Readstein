@@ -100,6 +100,14 @@ export type BookMetadata = {
   title: string | LanguageMap;
   author: string | Contributor;
   language: string | string[];
+  /**
+   * The language a work's source column is written in, as an ISO code ('la', 'de',
+   * 'el'). Read off the document's own column headings when a Markdown work is
+   * parsed (see `markTranslationColumns`). It names the reader's 'Show <language>'
+   * switch, so a German work never offers to hide 'Latin'. Absent for formats with
+   * no such column and for any language outside the table in utils/sourceLanguage.ts.
+   */
+  sourceLanguage?: string;
   editor?: string;
   publisher?: string;
   published?: string;
@@ -121,6 +129,13 @@ export type BookMetadata = {
   /** Title of the translated-from work, so a missing target still reads well. */
   translationOfTitle?: string;
   description?: string;
+  /**
+   * A short note on the English translation's own provenance, stated apart from
+   * the work's description: which model produced it, that it was translated
+   * from the pages themselves and from nothing else. Rendered as its own small
+   * block below the Description (see BookDetailView), never inside it.
+   */
+  translationNote?: string;
   subject?: string | string[] | Contributor | Contributor[];
   identifier?: string;
   isbn?: string;

@@ -949,3 +949,45 @@ describe('instant-highlight selection suppression stays out of getStyles', () =>
     expect(css).not.toContain('user-select: none !important');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Hiding a work's source language (the 'Show <language>' switch)
+// ---------------------------------------------------------------------------
+// The source column is marked in the parsed document (.source-text, with
+// .translation-label on the redundant 'English:' heading and .editorial-note on
+// the translator's confidence notes). Hiding it is done HERE, in the stylesheet
+// the renderer applies to every document — so sections loaded later are hidden
+// too — and never by removing the nodes: a reading position is a CFI, and content
+// that is present but display:none still resolves after the reflow.
+describe('hiding the source language column', () => {
+  const theme = makeThemeCode();
+
+  it('hides the source column, its label and the translator notes when the switch is off', () => {
+    const css = getStyles(makeViewSettings({ showSourceLanguage: false }), theme);
+    expect(css).toContain(
+      '.source-text, .translation-label, .editorial-note { display: none !important; }',
+    );
+  });
+
+  it('emits nothing when the switch is on', () => {
+    const css = getStyles(makeViewSettings({ showSourceLanguage: true }), theme);
+    expect(css).not.toContain('.source-text, .translation-label');
+  });
+
+  it('emits nothing when the setting has never been touched', () => {
+    // Default is to show the source, so a book that has never been toggled reads
+    // exactly as it did before the switch existed.
+    const css = getStyles(makeViewSettings(), theme);
+    expect(css).not.toContain('.source-text, .translation-label');
+  });
+
+  it('puts the hide rule after the user stylesheet, so it works even with one', () => {
+    const css = getStyles(
+      makeViewSettings({ showSourceLanguage: false, userStylesheet: 'body { color: red; }' }),
+      theme,
+    );
+    expect(css.indexOf('.source-text, .translation-label')).toBeGreaterThan(
+      css.indexOf('body { color: red; }'),
+    );
+  });
+});

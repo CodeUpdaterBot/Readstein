@@ -11,6 +11,7 @@ import {
 } from './mdFootnotes';
 import { frontmatterToMetadata, parseFrontmatter } from './mdFrontmatter';
 import { sanitizeHtml } from './sanitize';
+import { sourceLanguageCodeOfHeading, TARGET_LANGUAGE_LABEL } from './sourceLanguage';
 
 // Render a standalone Markdown (.md) file into an in-memory foliate-js book at
 // runtime (no EPUB conversion). The document is split into one section per
@@ -71,6 +72,109 @@ type MarkdownSection = SectionItem & {
   unload: () => void;
 };
 
+/** A paragraph that is nothing but a column heading, e.g. `<p><strong>German:</strong></p>`. */
+const languageLabelOf = (el: Element | null): string | null => {
+  if (!el || el.tagName !== 'P' || el.children.length !== 1) return null;
+  const only = el.children[0] as Element;
+  if (only.tagName !== 'STRONG') return null;
+  const text = (el.textContent ?? '').trim();
+  if (text === `${TARGET_LANGUAGE_LABEL}:`) return text;
+  // A source heading in a language the table does not know is left alone rather
+  // than guessed at, so a book whose column cannot be named keeps every word.
+  return sourceLanguageCodeOfHeading(text) ? text : null;
+};
+
+/**
+ * Mark the source-language column so the reader can hide it.
+ *
+ * A translation file carries the two columns as `<p><strong>Latin:</strong></p>`
+ * followed by the source (as blockquotes) and then the same for `English:`. The
+ * source heading names the language, and hiding the source turns the book into a
+ * plain reading copy of the English, which is what a reader who only wants the
+ * translation is asking for.
+ *
+ * The marking is deliberately structural — a wrapper element and two class names —
+ * so the reader can toggle it with CSS alone. Nothing is removed from the document,
+ * so a CFI taken before the toggle still resolves to the same text afterwards,
+ * which is what keeps the reader's place when the pages reflow.
+ */
+const markTranslationColumns = (body: HTMLElement): string | null => {
+  const doc = body.ownerDocument;
+  let detected: string | null = null;
+  for (const candidate of Array.from(body.querySelectorAll('p'))) {
+    const heading = languageLabelOf(candidate);
+    if (!heading) continue;
+    // Only a source-language heading opens a column to hide. The target heading
+    // ('English:') closes one instead, and is marked further down.
+    const code = sourceLanguageCodeOfHeading(heading);
+    if (!code) continue;
+    if (candidate.closest('.source-text')) continue;
+
+    // The source runs to the next structural heading or to the English label.
+    const taken: ChildNode[] = [candidate];
+    for (let node = candidate.nextSibling; node; node = node.nextSibling) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as Element;
+        if (/^H[1-6]$/.test(el.tagName) || languageLabelOf(el)) break;
+      }
+      taken.push(node);
+    }
+
+    const wrapper = doc.createElement('div');
+    wrapper.className = 'source-text';
+    // The language travels with the column so a future reader can style or cite it
+    // without re-parsing the heading.
+    wrapper.setAttribute('data-lang', code);
+    detected ??= code;
+    candidate.parentNode?.insertBefore(wrapper, candidate);
+    for (const node of taken) wrapper.appendChild(node);
+
+    // The 'English:' heading only means anything while the source sits beside it;
+    // marking it lets the reader hide it with the source.
+    const next = wrapper.nextSibling;
+    if (next && next.nodeType === Node.ELEMENT_NODE) {
+      (next as Element).classList.add('translation-label');
+    }
+  }
+
+  // The first source language in the document names the work's source column for
+  // the reader's switch: a Latin work offers 'Show Latin', a German one 'Show German'.
+  return detected;
+};
+
+/** The translator's own working note for a page, e.g. `*confidence: medium | ...*`. */
+const CONFIDENCE_PREFIX = /^confidence\s*:/i;
+
+/**
+ * A paragraph that is a single italic run starting with `confidence:` — the
+ * translator's record of how the page was read, how sure they are, and what they
+ * corrected.
+ *
+ * This is working apparatus, not the work. A reader who hides the source language
+ * is asking to read the translation as a book, so these go with it. Genuine notes
+ * that belong to the manuscript — `[in red]`, `[large red initial]`, `[later
+ * hand, ...]` — sit inside the English prose and are left exactly as they are.
+ */
+const isEditorialNote = (el: Element | null): boolean => {
+  if (!el || el.tagName !== 'P' || el.children.length !== 1) return false;
+  const only = el.children[0] as Element;
+  if (only.tagName !== 'EM') return false;
+  return CONFIDENCE_PREFIX.test((el.textContent ?? '').trim());
+};
+
+/** Wrap those notes so the reader can hide them with the source column. */
+const markEditorialNotes = (body: HTMLElement): void => {
+  const doc = body.ownerDocument;
+  for (const candidate of Array.from(body.querySelectorAll('p'))) {
+    if (!isEditorialNote(candidate)) continue;
+    if (candidate.parentElement?.classList.contains('editorial-note')) continue;
+    const wrapper = doc.createElement('div');
+    wrapper.className = 'editorial-note';
+    candidate.parentNode?.insertBefore(wrapper, candidate);
+    wrapper.appendChild(candidate);
+  }
+};
+
 export async function makeMarkdownBook(file: File): Promise<BookDoc> {
   const text = await file.text();
   // The frontmatter block is stripped before rendering so it does not show up
@@ -80,6 +184,9 @@ export async function makeMarkdownBook(file: File): Promise<BookDoc> {
   const rawHtml = await markdown.parse(body);
   const safeHtml = sanitizeHtml(rawHtml);
   const docBody = new DOMParser().parseFromString(safeHtml, 'text/html').body;
+
+  const sourceLanguage = markTranslationColumns(docBody);
+  markEditorialNotes(docBody);
 
   // Lift the collected footnote definitions out before anything else looks at
   // the document: they are re-emitted per chapter below, and taking them out
@@ -268,6 +375,11 @@ export async function makeMarkdownBook(file: File): Promise<BookDoc> {
       author: '',
       language: 'en',
       ...frontmatter,
+      // The language the source column is written in, read off the document's own
+      // column headings. It names the reader's 'Show <language>' switch, so a German
+      // work never offers to hide 'Latin'. A declared frontmatter value is only a
+      // fallback: what the headings actually say is the truth about the column.
+      sourceLanguage: sourceLanguage ?? frontmatter.sourceLanguage,
       title,
       // A frontmatter identifier — an explicit one, else the ISBN — makes the
       // same book import to the same `metaHash` from any copy of the file. With

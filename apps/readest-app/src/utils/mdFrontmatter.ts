@@ -170,6 +170,10 @@ export const frontmatterToMetadata = (
   set('publisher', one(pick(fields, 'publisher')));
   set('published', one(pick(fields, 'published', 'date', 'pubdate')));
   set('description', one(pick(fields, 'description', 'summary')));
+  // The translation's own provenance note — a separate block from the work's
+  // description, so it is read off its own key (`translationNote` normalises to
+  // `translationnote`).
+  set('translationNote', one(pick(fields, 'translationnote')));
   set('subject', many(pick(fields, 'subject', 'tags', 'keywords')));
   set('series', one(pick(fields, 'series')));
 

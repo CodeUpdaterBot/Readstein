@@ -32,6 +32,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { getStyles } from '@/utils/style';
 import { navigateToLogin } from '@/utils/nav';
 import { getScrollGapAttr } from '@/utils/webtoon';
+import { sourceLanguageLabelOfCode } from '@/utils/sourceLanguage';
 import { applyPageTurnAttributes } from '@/app/reader/hooks/useCapturedTurn';
 import { eventDispatcher } from '@/utils/event';
 import { getMaxInlineSize } from '@/utils/config';
@@ -69,6 +70,22 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
 
   const { themeMode, isDarkMode, setThemeMode } = useThemeStore();
   const [isScrolledMode, setScrolledMode] = useState(viewSettings!.scrolled);
+
+  // A translation file sets a work's own language beside its English. Hiding it
+  // leaves a plain reading copy of the English; showing it returns the side-by-side
+  // comparison. Nothing is removed from the text, so the reader's place survives the
+  // reflow (see the effect below).
+  const [showSource, setShowSource] = useState(viewSettings!.showSourceLanguage !== false);
+  // Name the switch after the language the open work is actually written in. The code
+  // is read off the document's own column headings while it is parsed (utils/md.ts),
+  // so a Latin work offers 'Show Latin' and a German one 'Show German' with nothing
+  // for the reader to keep in step.
+  const sourceLanguageName = sourceLanguageLabelOfCode(
+    bookData?.bookDoc?.metadata?.sourceLanguage ?? '',
+  );
+  const showSourceLabel = sourceLanguageName
+    ? _('Show {{language}}', { language: sourceLanguageName })
+    : _('Show source language');
   const [scrolledDirection, setScrolledDirection] = useState(
     viewSettings!.scrolledDirection ?? 'vertical',
   );
@@ -155,6 +172,24 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
     saveViewSettings(envConfig, bookKey, 'scrolledDirection', scrolledDirection, true, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrolledDirection]);
+
+  useEffect(() => {
+    if (showSource === (viewSettings!.showSourceLanguage !== false)) return;
+    viewSettings!.showSourceLanguage = showSource;
+    // setStyles is the stylesheet the renderer applies to EVERY document, so the
+    // change reaches sections that load later as well — no per-document bookkeeping.
+    getView(bookKey)?.renderer.setStyles?.(getStyles(viewSettings!));
+    setViewSettings(bookKey, viewSettings!);
+    saveViewSettings(envConfig, bookKey, 'showSourceLanguage', showSource, true, false);
+    // Hiding a column reflows the whole book: page numbers shift under the reader, so
+    // re-locate to the position they were actually reading rather than the same page
+    // number. The CFI anchors to the text, which the reflow leaves untouched.
+    const cfi = (viewState as { location?: { cfi?: string } } | undefined)?.location?.cfi;
+    if (cfi) {
+      requestAnimationFrame(() => getView(bookKey)?.goTo(cfi));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSource]);
 
   useEffect(() => {
     if (isScrolledMode === viewSettings!.scrolled) return;
@@ -452,6 +487,17 @@ const ViewMenu: React.FC<ViewMenuProps> = ({
           </>
           <hr aria-hidden='true' className='border-base-300 my-1' />
         </>
+      )}
+
+      {/* Offered only for a work that actually carries a source column: the code is
+          read off the document's own headings (utils/md.ts), so every other format
+          keeps exactly the menu it had rather than gaining a row that does nothing. */}
+      {bookData?.bookDoc?.metadata?.sourceLanguage && (
+        <MenuItem
+          label={showSourceLabel}
+          Icon={showSource ? MdCheck : undefined}
+          onClick={() => setShowSource(!showSource)}
+        />
       )}
 
       {!bookData.isFixedLayout && (

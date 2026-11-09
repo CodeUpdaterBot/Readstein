@@ -279,10 +279,26 @@ const closeBook = async (book: SearchableBookDoc | null, file: File | null) => {
   }
 };
 
-const makeAcceptNode = (book: Book) =>
+/**
+ * The classes a translation file's source column is marked with while it is
+ * parsed (see `markTranslationColumns` / `markEditorialNotes` in utils/md.ts).
+ */
+const SOURCE_COLUMN_CLASSES = ['source-text', 'translation-label', 'editorial-note'];
+
+/** True when this section carries a work's original source column. */
+const hasSourceColumn = (doc: Document): boolean => !!doc.querySelector('.source-text');
+
+/**
+ * The node filter the text walker runs with. `excludeSourceColumn` takes the
+ * work's own language out of the text the search sees — used by the index build
+ * (which stores that text alongside the whole one) and by the CFI resolution
+ * that has to walk the section the same way again.
+ */
+const makeAcceptNode = (book: Book, excludeSourceColumn = false) =>
   createRejectFilter({
     tags: book.primaryLanguage?.startsWith('ja') ? ['rt'] : [],
     attributes: ['cfi-inert'],
+    classes: excludeSourceColumn ? SOURCE_COLUMN_CLASSES : [],
   });
 
 interface CachedSearchBook {
@@ -435,6 +451,7 @@ const toSubitems = (
   sectionIndex: number,
   text: string,
   matches: LibrarySearchWorkerMatch[],
+  excludeSource = false,
 ): LibrarySearchMatch[] =>
   matches.map((match) => {
     const locator: SearchResultLocator = {
@@ -442,6 +459,9 @@ const toSubitems = (
       start: match.start,
       end: match.end,
       ...(match.runs.length ? { runs: match.runs } : {}),
+      // Says which text these offsets belong to, so opening the result walks the
+      // section the same way the search did.
+      ...(excludeSource ? { excludeSource: true } : {}),
     };
     if (!match.runs.length) {
       return { locator, excerpt: makeExcerpt(text, match.start, match.end) };
@@ -635,13 +655,19 @@ export async function* searchLibraryBooks(
 
       let bookMatches = 0;
       let bookTruncated = false;
+      // 'English only': search the translation on its own, against the cached
+      // section text with the work's own language taken out (see
+      // librarySearchIndex), so the matches, the snippets and the count all come
+      // from the English. The source stays in the book and is still what a
+      // reading position is resolved against.
+      const searchSourceFree = config.includeSourceLanguage === false;
 
       if (indexDb && isSearchIndexFresh(meta, book) && nodesFresh) {
         // Indexed path: search cached text; the book file is never opened.
         const usePrefilter = config.mode === 'contains' || config.mode === 'whole-words';
         let sections: SearchIndexSection[] = usePrefilter
-          ? await loadSearchIndexCandidates(indexDb, query)
-          : await loadSearchIndexSections(indexDb);
+          ? await loadSearchIndexCandidates(indexDb, query, searchSourceFree)
+          : await loadSearchIndexSections(indexDb, searchSourceFree);
         if (options.sectionIndex != null) {
           sections = sections.filter((section) => section.idx === options.sectionIndex);
         }
@@ -664,7 +690,13 @@ export async function* searchLibraryBooks(
           if (signal?.aborted) return;
           if (outcome.truncated) bookTruncated = true;
           if (outcome.matches.length) {
-            const subitems = toSubitems(config.mode, section.idx, section.text, outcome.matches);
+            const subitems = toSubitems(
+              config.mode,
+              section.idx,
+              section.text,
+              outcome.matches,
+              searchSourceFree,
+            );
             bookMatches += subitems.length;
             totalMatches += subitems.length;
             yield {
@@ -729,6 +761,7 @@ export async function* searchLibraryBooks(
         const usedNavHash = nav ? hashSearchToc(nav.toc) : '';
         await loadTextWalker();
         const acceptNode = makeAcceptNode(book);
+        const sourceFreeAcceptNode = makeAcceptNode(book, true);
         const tocProgress = await createTOCProgress(bookDoc);
         const totalSections = bookDoc.sections.length;
         if (indexDb) {
@@ -763,14 +796,30 @@ export async function* searchLibraryBooks(
                 doc,
                 acceptNode,
               );
+              // A second walk of the same section with the work's own language
+              // left out, for the index's 'English only' copy. Only done when a
+              // section actually carries a source column, so a book without one
+              // pays nothing for a feature it cannot use.
+              const sourceFreeText = hasSourceColumn(doc)
+                ? prepareSearchSection(
+                    `${book.hash}:${book.updatedAt}:${sectionIndex}:en`,
+                    doc,
+                    sourceFreeAcceptNode,
+                  ).text
+                : undefined;
+              const matchText = searchSourceFree && sourceFreeText ? sourceFreeText : prepared.text;
               const sectionLocale = doc.body?.lang || doc.documentElement?.lang || locale;
               const label = tocProgress?.getProgress(sectionIndex, null)?.label ?? '';
               if (indexDb) {
-                await writeSearchIndexSection(indexDb, sectionIndex, label, prepared.text).catch(
-                  () => {
-                    indexComplete = false;
-                  },
-                );
+                await writeSearchIndexSection(
+                  indexDb,
+                  sectionIndex,
+                  label,
+                  prepared.text,
+                  sourceFreeText,
+                ).catch(() => {
+                  indexComplete = false;
+                });
               }
               const remaining = maxResultsPerBook - bookMatches;
               if (options.sectionIndex != null && options.sectionIndex !== sectionIndex) {
@@ -781,7 +830,7 @@ export async function* searchLibraryBooks(
                 const outcome = await matchSectionText(
                   book,
                   sectionIndex,
-                  prepared.text,
+                  matchText,
                   sectionLocale,
                   remaining,
                 );
@@ -791,8 +840,9 @@ export async function* searchLibraryBooks(
                   const subitems = toSubitems(
                     config.mode,
                     sectionIndex,
-                    prepared.text,
+                    matchText,
                     outcome.matches,
+                    searchSourceFree,
                   );
                   bookMatches += subitems.length;
                   totalMatches += subitems.length;
@@ -894,13 +944,19 @@ export const resolveSearchResultCfis = async (
   } catch {
     return resolved;
   }
-  const bySection = new Map<number, number[]>();
+  // Grouped by section AND by which text the offsets belong to: a locator taken
+  // with the source column excluded has to be resolved against a walk that leaves
+  // the source out, or the CFI lands on unrelated words.
+  const bySection = new Map<string, number[]>();
   locators.forEach((locator, position) => {
-    const group = bySection.get(locator.section);
+    const key = `${locator.section}\u0000${locator.excludeSource ? 1 : 0}`;
+    const group = bySection.get(key);
     if (group) group.push(position);
-    else bySection.set(locator.section, [position]);
+    else bySection.set(key, [position]);
   });
-  for (const [sectionIndex, positions] of bySection) {
+  for (const [key, positions] of bySection) {
+    const sectionIndex = Number(key.split('\u0000')[0]);
+    const excludeSource = key.endsWith('\u00001');
     try {
       const section = bookDoc.sections?.[sectionIndex];
       const baseCFI = section?.cfi ?? CFI.fake.fromIndex(sectionIndex);
@@ -912,7 +968,14 @@ export const resolveSearchResultCfis = async (
         for (const position of positions) resolved[position] = { cfi: baseCFI };
         continue;
       }
-      const prepared = prepareSearchSection('resolve', doc, makeAcceptNode(book));
+      // Both ends have to agree on whether this section HAS a source column: the
+      // index build only stores the source-free text when it does, so a search
+      // that asked to leave the source out excluded nothing here.
+      const prepared = prepareSearchSection(
+        'resolve',
+        doc,
+        makeAcceptNode(book, excludeSource && hasSourceColumn(doc)),
+      );
       const rangeCfi = (start: number, end: number): string | null => {
         if (end > prepared.text.length || start >= end) return null;
         const from = findNodeOffset(prepared.cumulative, start, 'right');
