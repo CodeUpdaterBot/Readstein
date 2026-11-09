@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import { FaChevronDown, FaSearch } from 'react-icons/fa';
 import { MdManageSearch, MdOutlineDonutLarge } from 'react-icons/md';
 import { PiPlus } from 'react-icons/pi';
@@ -87,24 +87,6 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onSearchQueryChange(e.target.value);
   };
-
-  // The source-language switch has to flip the instant it is clicked, whatever
-  // else the library is busy with — it is a setting, not a command that waits for
-  // a scan. The page schedules search-config changes as a React transition, and a
-  // controlled switch bound straight to the config can therefore sit visibly
-  // un-flipped while a full-text scan is running. This holds the value the reader
-  // chose, and follows the config whenever it does arrive (the same setting is in
-  // the search-options menu, and a stored one comes back from the URL).
-  const [sourceIncluded, setSourceIncluded] = useState(
-    searchConfig.includeSourceLanguage !== false,
-  );
-  const updateSourceIncluded = (next: boolean) => {
-    setSourceIncluded(next);
-    onSearchConfigChange({ ...searchConfig, includeSourceLanguage: next });
-  };
-  useEffect(() => {
-    setSourceIncluded(searchConfig.includeSourceLanguage !== false);
-  }, [searchConfig.includeSourceLanguage]);
 
   const windowButtonVisible = appService?.hasWindowBar && !isTrafficLightVisible;
   const currentBooksCount = currentBookshelf.length;
@@ -292,33 +274,6 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
           </div>
         ) : (
           <div className='flex h-full items-center gap-x-2 sm:gap-x-4'>
-            {/* The original source language in full-text results. Left on, a
-                translation file is searched as it reads — Latin column and all —
-                which is the right default: the source is in the book, and a reader
-                is entitled to find it. Turned off, the same work is searched
-                through its English alone, so the two-column works stop burying
-                their English hits under pages of Latin. It sits here rather than
-                only in the search options because it is what a reader reaches for
-                at the moment the results are unusable. */}
-            {searchTarget === 'text' && (
-              <label
-                className='text-base-content/60 flex cursor-pointer items-center gap-x-2'
-                title={_('Include original source language in search?')}
-              >
-                <span className='hidden text-xs whitespace-nowrap select-none lg:inline'>
-                  {_('Include original source language in search?')}
-                </span>
-                <input
-                  type='checkbox'
-                  role='switch'
-                  aria-checked={sourceIncluded}
-                  aria-label={_('Include original source language in search?')}
-                  className='toggle toggle-sm'
-                  checked={sourceIncluded}
-                  onChange={(event) => updateSourceIncluded(event.target.checked)}
-                />
-              </label>
-            )}
             <Dropdown
               label={_('View Menu')}
               className='exclude-title-bar-mousedown dropdown-bottom dropdown-end'
