@@ -21,6 +21,7 @@ import {
   type LibrarySearchSession,
 } from '@/services/librarySearchService';
 import { createBookFilter } from '../utils/libraryUtils';
+import { withoutSourceLanguage } from '../utils/sourceLanguageFilter';
 import {
   makeLibrarySearchKey,
   readLibrarySearchSnapshot,
@@ -404,6 +405,20 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
     [books, config, query],
   );
 
+  // The dial, its counts and the result list all read this rather than the raw
+  // scan: leaving a work's own language out of the results is a filter over what
+  // was already found, not a second search, so flipping the switch is instant and
+  // the swept library is not swept again (see utils/sourceLanguageFilter).
+  const visibleGroups = useMemo(
+    () =>
+      new Map(
+        withoutSourceLanguage([...groups.values()], config.includeSourceLanguage !== false).map(
+          (group) => [group.book.hash, group],
+        ),
+      ),
+    [groups, config.includeSourceLanguage],
+  );
+
   useEffect(() => {
     if (!textSearchActive) {
       setGroups(new Map());
@@ -476,10 +491,10 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
   // scan reaches them. Without a query it is the whole shelf, filtered by the
   // same metadata match the list view uses for a book search.
   const candidateBooks = useMemo(() => {
-    if (textSearchActive) return [...groups.values()].map((group) => group.book);
+    if (textSearchActive) return [...visibleGroups.values()].map((group) => group.book);
     const filter = createBookFilter(query.trim() ? query : null);
     return books.filter((book) => !book.deletedAt && filter(book));
-  }, [textSearchActive, groups, books, query]);
+  }, [textSearchActive, visibleGroups, books, query]);
 
   const stepYears = ZOOM_STEPS[clamp(zoom, 0, ZOOM_STEPS.length - 1)] ?? 1;
   // Every dated component of every work in play, collected once — the bands and the
@@ -529,11 +544,11 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
         const hash = work.book.hash;
         if (counted.has(hash)) continue;
         counted.add(hash);
-        total += groups.get(hash)?.matchCount ?? 0;
+        total += visibleGroups.get(hash)?.matchCount ?? 0;
       }
       return total;
     });
-  }, [bands, groups, textSearchActive]);
+  }, [bands, visibleGroups, textSearchActive]);
   // Whether any band has anything to gauge at all — one flag for the whole ring, so
   // every date sits at the same radius and the type stays one size.
   const showGauge = bandMatchCounts !== null && bandMatchCounts.some((count) => count > 0);
@@ -634,7 +649,7 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
   });
 
   const work = bandBooks[selectedWork];
-  const group = work ? groups.get(work.hash) : undefined;
+  const group = work ? visibleGroups.get(work.hash) : undefined;
   // The band's works carry the dated component each book occupies *there*, so a
   // composite work shows the date of the part the user actually stopped on.
   const bandWorkByHash = useMemo(() => {
@@ -975,8 +990,8 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
   // of a search, so the library-wide total is the headline and the selection is
   // the detail underneath it.
   const totalResults = useMemo(
-    () => [...groups.values()].reduce((sum, item) => sum + item.matchCount, 0),
-    [groups],
+    () => [...visibleGroups.values()].reduce((sum, item) => sum + item.matchCount, 0),
+    [visibleGroups],
   );
   const plural = (count: number, one: string, many: string) =>
     _(count === 1 ? one : many, { count });
@@ -1569,7 +1584,7 @@ const SpiralSearchView: React.FC<SpiralSearchViewProps> = ({
               // compact strip the cards scroll horizontally instead, so no offset.
               const shift = compact ? 0 : -(offset * offset) * 3.5;
               const isSelected = absoluteIndex === selectedWork;
-              const resultGroup = groups.get(item.hash);
+              const resultGroup = visibleGroups.get(item.hash);
               return (
                 <button
                   key={item.hash}

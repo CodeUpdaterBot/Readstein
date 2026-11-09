@@ -16,6 +16,7 @@ import type {
 } from '@/types/book';
 import type { AppService } from '@/types/system';
 import { addLibrarySearchHistory } from '../utils/searchHistory';
+import { withoutSourceLanguage } from '../utils/sourceLanguageFilter';
 import {
   makeLibrarySearchKey,
   readLibrarySearchSnapshot,
@@ -307,7 +308,12 @@ const LibrarySearchResults = ({
   );
 
   const isCurrentSearch = activeSearchKeyRef.current === searchKey;
-  const displayedGroups = isCurrentSearch ? groups : [];
+  // Leaving the work's own language out of the results is a filter over what the
+  // scan already found, not a second search: the switch is instant, the cached
+  // scan is reused, and nothing is read from the book again.
+  const displayedGroups = isCurrentSearch
+    ? withoutSourceLanguage(groups, config.includeSourceLanguage !== false)
+    : [];
   const displayedIssues = isCurrentSearch ? issues : [];
   const displayedSkipped = isCurrentSearch ? skipped : 0;
   const displayedQueryIssue = isCurrentSearch ? queryIssue : '';

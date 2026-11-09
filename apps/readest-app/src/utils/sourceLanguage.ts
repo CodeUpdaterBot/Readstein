@@ -85,3 +85,39 @@ export const sourceLanguageCodeOfHeading = (heading: string): string | null => {
   const name = sourceLanguageLabelOfHeading(heading);
   return name ? sourceLanguageCodeOfLabel(name) : null;
 };
+
+export interface SourceLanguageRange {
+  start: number;
+  end: number;
+}
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Where a section's own-language column sits inside its extracted text.
+ *
+ * A translation file prints the source under a heading (`**Latin:**`) and the
+ * English under the next one (`**English:**`), so in the text the source column
+ * is simply what lies between the two. The reader marks those pieces while it
+ * parses the document (see `markTranslationColumns` in utils/md.ts), but a cached
+ * search index holds only the text, and the 'English only' search has to know
+ * where the source sits without a document — so this reads the text itself.
+ *
+ * Offsets are into the given text, which is exactly what a search result's
+ * locator uses. A source heading with no English after it runs to the end.
+ */
+export const sourceLanguageRanges = (text: string): SourceLanguageRange[] => {
+  // Longest name first: 'Old High German:' must not be read as 'German:'.
+  const names = Object.keys(SOURCE_LANGUAGE_BY_LABEL).sort((a, b) => b.length - a.length);
+  const opener = new RegExp(`(?:${names.map(escapeRegExp).join('|')}):`, 'g');
+  const closer = new RegExp(`${escapeRegExp(TARGET_LANGUAGE_LABEL)}:`, 'g');
+  const ranges: SourceLanguageRange[] = [];
+  for (let match = opener.exec(text); match; match = opener.exec(text)) {
+    const start = match.index;
+    closer.lastIndex = start + match[0].length;
+    const end = closer.exec(text)?.index ?? text.length;
+    ranges.push({ start, end });
+    opener.lastIndex = Math.max(end, start + match[0].length);
+  }
+  return ranges;
+};

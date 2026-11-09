@@ -565,9 +565,10 @@ export type LibrarySearchConfig = Omit<BookSearchConfig, 'mode'> & {
    * that prints it *and* every page whose English rendering needs it. That is the
    * right default — the source is in the book and a reader is entitled to find it
    * — but on a long two-column work it can bury the English hits under pages of
-   * Latin. Turned off, such a work is searched through its English text
-   * only: the matches, the snippets and the count all come from the translation,
-   * and the reader's place is still resolved against the full text underneath.
+   * Latin. Turned off, the matches that fall inside the work's source column are
+   * crossed out of the results, and the count with them. The scan itself is
+   * unchanged either way, so the switch costs nothing and works on results
+   * already on screen.
    */
   includeSourceLanguage?: boolean;
 };
@@ -598,15 +599,6 @@ export interface SearchResultLocator {
   end: number;
   // fuzzy/nearby: matched sub-spans within [start, end)
   runs?: { start: number; end: number }[];
-  /**
-   * The offsets are into the section's SOURCE-FREE text rather than its whole
-   * text — the search was run with `includeSourceLanguage` off, and this section
-   * carries a source column. Resolution has to walk the section with the same
-   * node filter the search used (see resolveSearchResultCfis), or the CFI lands
-   * on the wrong words. Absent means the whole text, which is every locator
-   * taken before this option existed.
-   */
-  excludeSource?: boolean;
 }
 
 export interface LibrarySearchMatch {
@@ -618,6 +610,14 @@ export interface LibrarySearchSectionResult {
   index: number;
   label: string;
   subitems: LibrarySearchMatch[];
+  /**
+   * The stretches of this section's text that print the work's own language, as
+   * offsets into the same text its locators use. Absent for a section with no
+   * source column. The result list crosses out the matches inside them when the
+   * reader asks for English only, which is what keeps that switch instant: the
+   * scan already found everything and does not have to be run again.
+   */
+  sourceRanges?: { start: number; end: number }[];
 }
 
 export interface BookSearchResult {

@@ -46,10 +46,9 @@ export const makeLibrarySearchKey = (
     config.matchCase,
     config.matchDiacritics,
     config.englishOnly,
-    // Normalised, not stringified: `undefined` and `true` mean the same thing
-    // here, and a key that distinguished them would throw the cached scan away
-    // every time the switch came back on.
-    config.includeSourceLanguage === false ? 'source-off' : 'source-on',
+    // `includeSourceLanguage` is deliberately absent: the scan is the same either
+    // way and the result list does the crossing-out, so flipping the switch reuses
+    // the finished scan instead of throwing it away and sweeping the library again.
     config.nearbyWords,
   ].join(':');
   return `${booksKey}\u0000${configKey}\u0000${query}`;

@@ -28,24 +28,13 @@ export const SEARCH_INDEX_VERSION = 2;
  * file, re-parsing every section and re-extracting its text — for the ~190 books
  * with no source column, all of it to add a column nothing will ever read.
  */
-const READABLE_INDEX_VERSIONS = [1, SEARCH_INDEX_VERSION];
+const READABLE_INDEX_VERSIONS: number[] = [1, 2];
 
-/**
- * Does this book have a source column for the source-free copy to hold?
- *
- * A translation says so by pointing at the work it translates; a book parsed
- * since this option existed also carries the language read off its own column
- * headings. A book with neither keeps the index it has — the option simply
- * behaves as if it were on for that one book.
- */
-const storesSourceFreeText = (book: Book): boolean =>
-  !!book.metadata?.translationOf || !!book.metadata?.sourceLanguage;
-
-export const isSearchIndexFresh = (meta: SearchIndexMeta | null, book: Book): boolean => {
-  if (!meta || !meta.complete || meta.updatedAt !== book.updatedAt) return false;
-  if (meta.version === SEARCH_INDEX_VERSION) return true;
-  return !storesSourceFreeText(book) && READABLE_INDEX_VERSIONS.includes(meta.version);
-};
+export const isSearchIndexFresh = (meta: SearchIndexMeta | null, book: Book): boolean =>
+  !!meta &&
+  meta.complete &&
+  meta.updatedAt === book.updatedAt &&
+  READABLE_INDEX_VERSIONS.includes(meta.version);
 
 // Maximal folding (caseless + diacriticless) with the default locale: any
 // occurrence under any stricter search config folds into an occurrence in
@@ -131,25 +120,15 @@ export const writeSearchIndexSection = async (
   idx: number,
   label: string,
   text: string,
-  sourceFreeText?: string,
 ): Promise<void> => {
   const folded = foldValue(text, FOLD_OPTIONS);
-  // Only stored when it actually differs: a section with no source column has
-  // nothing to exclude, and the full text stands in for it at read time.
-  const english = sourceFreeText && sourceFreeText !== text ? sourceFreeText : null;
-  const foldedEnglish = english ? foldValue(english, FOLD_OPTIONS) : null;
   await db.execute('DELETE FROM search_sections WHERE idx = ?', [idx]);
-  await db.execute(
-    'INSERT INTO search_sections (idx, label, text, folded, text_en, folded_en) VALUES (?, ?, ?, ?, ?, ?)',
-    [
-      idx,
-      label,
-      text,
-      folded === text ? null : folded,
-      english,
-      foldedEnglish && foldedEnglish !== english ? foldedEnglish : null,
-    ],
-  );
+  await db.execute('INSERT INTO search_sections (idx, label, text, folded) VALUES (?, ?, ?, ?)', [
+    idx,
+    label,
+    text,
+    folded === text ? null : folded,
+  ]);
 };
 
 // Turso is WAL-only (PRAGMA journal_mode = DELETE is ignored) and implements
@@ -287,15 +266,8 @@ const escapeLike = (value: string) => value.replace(/[\\%_]/g, (char) => `\\${ch
  * option matches and shows — a section with no source column has no such text
  * stored and falls back to the whole of it.
  */
-export const loadSearchIndexSections = (
-  db: DatabaseService,
-  sourceFree = false,
-): Promise<SearchIndexSection[]> =>
-  db.select<SectionRow>(
-    sourceFree
-      ? 'SELECT idx, label, COALESCE(text_en, text) AS text FROM search_sections ORDER BY idx'
-      : 'SELECT idx, label, text FROM search_sections ORDER BY idx',
-  );
+export const loadSearchIndexSections = (db: DatabaseService): Promise<SearchIndexSection[]> =>
+  db.select<SectionRow>('SELECT idx, label, text FROM search_sections ORDER BY idx');
 
 /**
  * Superset prefilter for contains/whole-words: sections whose folded text
@@ -305,15 +277,11 @@ export const loadSearchIndexSections = (
 export const loadSearchIndexCandidates = (
   db: DatabaseService,
   query: string,
-  sourceFree = false,
 ): Promise<SearchIndexSection[]> => {
   const folded = foldValue(query, FOLD_OPTIONS);
-  if (!folded) return loadSearchIndexSections(db, sourceFree);
-  const column = sourceFree
-    ? 'COALESCE(folded_en, folded, text_en, text)'
-    : 'COALESCE(folded, text)';
+  if (!folded) return loadSearchIndexSections(db);
   return db.select<SectionRow>(
-    `SELECT idx, label, ${sourceFree ? 'COALESCE(text_en, text) AS text' : 'text'} FROM search_sections WHERE ${column} LIKE ? ESCAPE '\\' ORDER BY idx`,
+    `SELECT idx, label, text FROM search_sections WHERE COALESCE(folded, text) LIKE ? ESCAPE '\\' ORDER BY idx`,
     [`%${escapeLike(folded)}%`],
   );
 };

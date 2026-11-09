@@ -13,13 +13,14 @@ import { BOOK_NAV_VERSION, type BookNav } from '@/services/nav';
 import { NodeDatabaseService } from '@/services/database/nodeDatabaseService';
 import { migrate } from '@/services/database/migrate';
 import { getMigrations } from '@/services/database/migrations';
+import { withoutSourceLanguage } from '@/app/library/utils/sourceLanguageFilter';
 import { BookFileNotFoundError } from '@/services/errors';
 import { SEARCH_INDEX_VERSION, isSearchIndexFresh } from '@/services/librarySearchIndex';
 import type {
   Book,
   BookContent,
   LibrarySearchConfig,
-  LibrarySearchMatch,
+  LibrarySearchSectionResult,
   SearchResultLocator,
 } from '@/types/book';
 import type { DatabaseService } from '@/types/database';
@@ -596,13 +597,17 @@ describe('searchLibraryBooks', () => {
 });
 
 /**
- * A translation file sets each page's original beside its English, so a query that
- * happens to be a Latin word matches the Latin column as well. The switch on the
- * library header ('Include original source language in search?') turns that off:
- * the same work is then searched through its English alone, and the matches, the
- * snippets and the count all come from the translation.
+ * A translation prints each page's own language beside its English, so a query
+ * that happens to be a Latin word matches every page that prints it. The library
+ * header's switch — 'Include original source language in search?' — crosses
+ * those matches back out.
+ *
+ * The scan itself never depends on the switch: every section is searched whole,
+ * and each section result says where its source column lies. So the switch is a
+ * filter over results already found — instant, and never a second sweep of the
+ * library.
  */
-describe('searching a translation without its source language', () => {
+describe("a translation and the work's own language", () => {
   const book = makeBook('twocolumn', 'Two Column Work');
 
   const twoColumnFile = () =>
@@ -621,141 +626,140 @@ describe('searching a translation without its source language', () => {
       ].join('\n'),
     );
 
-  const collect = async (
-    service: ReturnType<typeof makeService>,
-    query: string,
-    overrides: Partial<LibrarySearchConfig>,
-  ) => {
-    const matches: LibrarySearchMatch[] = [];
-    let count = 0;
-    for await (const event of searchLibraryBooks(service, [book], query, {
-      config: { ...config, ...overrides },
-    })) {
-      if (event.type === 'result') matches.push(...event.result.subitems);
-      if (event.type === 'completed') count = event.matchCount;
+  const collect = async (service: ReturnType<typeof makeService>, query: string) => {
+    const sections: LibrarySearchSectionResult[] = [];
+    for await (const event of searchLibraryBooks(service, [book], query, { config })) {
+      if (event.type === 'result') sections.push(event.result);
     }
-    return { matches, count };
+    return sections;
   };
 
-  it('finds a source-language word by default', async () => {
-    const service = makeService(new Map([['twocolumn', twoColumnFile()]]));
-    const { matches, count } = await collect(service, 'caelum', {});
+  /** What the reader sees with the switch off: the results as the views filter them. */
+  const visible = (sections: LibrarySearchSectionResult[]) =>
+    withoutSourceLanguage(
+      [
+        {
+          book,
+          matchCount: sections.reduce((total, section) => total + section.subitems.length, 0),
+          sections,
+        },
+      ],
+      false,
+    );
 
-    expect(count).toBe(1);
-    expect(matches[0]!.excerpt.match).toBe('caelum');
-    // Every locator taken without the switch says nothing about which text it is
-    // in — that IS the whole text, which is how every locator behaved before.
-    expect(matches[0]!.locator.excludeSource).toBeUndefined();
+  const sourceRangeOf = (sections: LibrarySearchSectionResult[]) => {
+    const range = sections[0]?.sourceRanges?.[0];
+    if (!range) throw new Error('the section should say where its source column sits');
+    return range;
+  };
+
+  const singleService = () => makeService(new Map([['twocolumn', twoColumnFile()]]));
+
+  it('says where the source column sits, in the offsets the results use', async () => {
+    const sections = await collect(singleService(), 'caelum');
+    const range = sourceRangeOf(sections);
+    const match = sections[0]!.subitems[0]!;
+
+    expect(range.end).toBeGreaterThan(range.start);
+    expect(match.locator.start).toBeGreaterThanOrEqual(range.start);
+    expect(match.locator.start).toBeLessThan(range.end);
+    expect(match.excerpt.match).toBe('caelum');
   });
 
-  it('leaves the source-language word out when the switch is off', async () => {
-    const service = makeService(new Map([['twocolumn', twoColumnFile()]]));
-    const { matches, count } = await collect(service, 'caelum', {
-      includeSourceLanguage: false,
-    });
+  it('leaves the English outside it, so the two can be told apart', async () => {
+    const sections = await collect(singleService(), 'heaven');
+    const range = sourceRangeOf(sections);
+    const match = sections[0]!.subitems[0]!;
 
-    expect(count).toBe(0);
-    expect(matches).toEqual([]);
+    expect(match.excerpt.match).toBe('Heaven');
+    expect(match.locator.start).toBeGreaterThanOrEqual(range.end);
   });
 
-  it('still finds the English, and says which text its offsets are in', async () => {
-    const service = makeService(new Map([['twocolumn', twoColumnFile()]]));
-    const english = await collect(service, 'heaven', { includeSourceLanguage: false });
+  it('crosses the source hits out on demand, and keeps the English ones', async () => {
+    const service = singleService();
 
-    expect(english.count).toBe(1);
-    expect(english.matches[0]!.excerpt.match).toBe('Heaven');
-    expect(english.matches[0]!.locator.excludeSource).toBe(true);
-
-    // The same word on the second search comes out of the cached index, so the
-    // English copy has to have survived the round-trip through search.db.
-    const cached = await collect(service, 'heaven', { includeSourceLanguage: false });
-    expect(cached.count).toBe(1);
-    expect(cached.matches[0]!.locator.excludeSource).toBe(true);
+    expect(visible(await collect(service, 'caelum'))).toEqual([]);
+    expect(visible(await collect(service, 'heaven'))[0]!.matchCount).toBe(1);
   });
 
-  it('resolves a CFI for an English hit taken with the source left out', async () => {
-    // The crux of the whole option: the offsets are into the section WITHOUT its
-    // source column, so the resolution has to walk the section the same way. Get
-    // this wrong and the result opens on unrelated words rather than failing.
-    const service = makeService(new Map([['twocolumn', twoColumnFile()]]));
-    const session = createLibrarySearchSession(service);
-    const locators: SearchResultLocator[] = [];
-    for await (const event of searchLibraryBooks(service, [book], 'earth', {
-      config: { ...config, includeSourceLanguage: false },
-      session,
-    })) {
-      if (event.type === 'result') locators.push(...event.result.subitems.map((m) => m.locator));
-    }
-    expect(locators).toHaveLength(1);
-    expect(locators[0]!.excludeSource).toBe(true);
+  it('gives the same answer out of the cached index as off the book file', async () => {
+    // The second search reads search.db, which holds a section's text and nothing
+    // else — so where the source column sits has to be found in that text alone,
+    // exactly as the offsets were measured, or the filter would quietly stop
+    // working once a book was indexed.
+    const service = singleService();
+    const live = await collect(service, 'caelum');
+    const cached = await collect(service, 'caelum');
 
-    const resolved = await resolveSearchResultCfi(session, book, locators[0]!);
-    expect(resolved).toBeTruthy();
-    await session.close();
+    expect(service.loadBookContent).toHaveBeenCalledTimes(1);
+    expect(cached).toEqual(live);
+    expect(visible(cached)).toEqual([]);
   });
 
   it('leaves a book with no source column entirely alone', async () => {
     const plain = makeBook('plain', 'Plain Work');
-    const service = makeService(
-      new Map([['plain', makeFile('# A chapter\nA needle appears here.')]]),
-    );
-    const search = async (overrides: Partial<LibrarySearchConfig>) => {
-      const matches: LibrarySearchMatch[] = [];
-      for await (const event of searchLibraryBooks(service, [plain], 'needle', {
-        config: { ...config, ...overrides },
-      })) {
-        if (event.type === 'result') matches.push(...event.result.subitems);
-      }
-      return matches;
-    };
+    const service = makeService(new Map([['plain', makeFile('# Chapter\nA needle here.')]]));
+    const sections: LibrarySearchSectionResult[] = [];
+    for await (const event of searchLibraryBooks(service, [plain], 'needle', { config })) {
+      if (event.type === 'result') sections.push(event.result);
+    }
 
-    expect(await search({})).toHaveLength(1);
-    expect(await search({ includeSourceLanguage: false })).toHaveLength(1);
+    expect(sections[0]!.sourceRanges).toBeUndefined();
+    expect(
+      withoutSourceLanguage([{ book: plain, matchCount: 1, sections }], false)[0]!.matchCount,
+    ).toBe(1);
+  });
+
+  it('still resolves a CFI for a hit taken with the source crossed out', async () => {
+    // The offsets are into the whole section — source included — so a filtered
+    // result opens exactly like any other.
+    const service = singleService();
+    const session = createLibrarySearchSession(service);
+    const locators: SearchResultLocator[] = [];
+    for await (const event of searchLibraryBooks(service, [book], 'earth', { config, session })) {
+      if (event.type === 'result') locators.push(...event.result.subitems.map((m) => m.locator));
+    }
+    expect(locators).toHaveLength(1);
+
+    const resolved = await resolveSearchResultCfi(session, book, locators[0]!);
+    expect(resolved).toBeTruthy();
+    await session.close();
   });
 });
 
 /**
  * Which cached indexes are worth keeping.
  *
- * Adding the source-free copy of a section's text bumped the index version, which
- * invalidated EVERY index in the library at once — and a rebuild re-opens the book
- * file and re-parses every section. Most books have no source column, so for them
- * that rebuild buys nothing at all. These pin the rule that decides it.
+ * An index stores a section's text and its folded form, and this build reads
+ * either version of that shape — so an index an earlier build wrote is kept
+ * rather than thrown away. A rebuild re-opens the book file and re-parses every
+ * section, which is far too much to pay for nothing: a version leaves this list
+ * only when a change actually makes the stored text unusable.
  */
 describe('isSearchIndexFresh', () => {
-  const meta = (overrides: Partial<Parameters<typeof isSearchIndexFresh>[0]> = {}) => ({
-    updatedAt: 1,
-    version: 1,
-    totalSections: 3,
-    complete: true,
-    navHash: '',
-    ...overrides,
-  });
-  const book = (metadata?: Record<string, string>) =>
-    ({ ...makeBook('fresh', 'Fresh Book'), metadata }) as Book;
+  const meta = (overrides: Record<string, unknown> = {}) =>
+    ({
+      updatedAt: 1,
+      version: 1,
+      totalSections: 3,
+      complete: true,
+      navHash: '',
+      ...overrides,
+    }) as Parameters<typeof isSearchIndexFresh>[0];
+  const book = makeBook('fresh', 'Fresh Book');
 
-  it('keeps a previous-version index for a book with no source column', () => {
-    expect(isSearchIndexFresh(meta({ version: 1 }), book())).toBe(true);
-  });
-
-  it('rebuilds a previous-version index for a translation, which has one', () => {
-    expect(isSearchIndexFresh(meta({ version: 1 }), book({ translationOf: 'abc' }))).toBe(false);
+  it('keeps an index of every version this build can read', () => {
+    expect(isSearchIndexFresh(meta({ version: 1 }), book)).toBe(true);
+    expect(isSearchIndexFresh(meta({ version: SEARCH_INDEX_VERSION }), book)).toBe(true);
   });
 
-  it('rebuilds for a book that names its source language', () => {
-    expect(isSearchIndexFresh(meta({ version: 1 }), book({ sourceLanguage: 'la' }))).toBe(false);
+  it('refuses one it cannot read', () => {
+    expect(isSearchIndexFresh(meta({ version: SEARCH_INDEX_VERSION + 1 }), book)).toBe(false);
   });
 
-  it('keeps a current-version index either way', () => {
-    expect(isSearchIndexFresh(meta({ version: SEARCH_INDEX_VERSION }), book())).toBe(true);
-    expect(
-      isSearchIndexFresh(meta({ version: SEARCH_INDEX_VERSION }), book({ translationOf: 'abc' })),
-    ).toBe(true);
-  });
-
-  it('never keeps an incomplete index, or one from a different edition of the book', () => {
-    expect(isSearchIndexFresh(meta({ complete: false }), book())).toBe(false);
-    expect(isSearchIndexFresh(meta({ updatedAt: 2 }), book())).toBe(false);
-    expect(isSearchIndexFresh(null, book())).toBe(false);
+  it('never keeps an incomplete index, or one from another edition of the book', () => {
+    expect(isSearchIndexFresh(meta({ complete: false }), book)).toBe(false);
+    expect(isSearchIndexFresh(meta({ updatedAt: 2 }), book)).toBe(false);
+    expect(isSearchIndexFresh(null, book)).toBe(false);
   });
 });
