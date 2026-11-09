@@ -14,6 +14,7 @@ import { NodeDatabaseService } from '@/services/database/nodeDatabaseService';
 import { migrate } from '@/services/database/migrate';
 import { getMigrations } from '@/services/database/migrations';
 import { BookFileNotFoundError } from '@/services/errors';
+import { SEARCH_INDEX_VERSION, isSearchIndexFresh } from '@/services/librarySearchIndex';
 import type {
   Book,
   BookContent,
@@ -710,5 +711,51 @@ describe('searching a translation without its source language', () => {
 
     expect(await search({})).toHaveLength(1);
     expect(await search({ includeSourceLanguage: false })).toHaveLength(1);
+  });
+});
+
+/**
+ * Which cached indexes are worth keeping.
+ *
+ * Adding the source-free copy of a section's text bumped the index version, which
+ * invalidated EVERY index in the library at once — and a rebuild re-opens the book
+ * file and re-parses every section. Most books have no source column, so for them
+ * that rebuild buys nothing at all. These pin the rule that decides it.
+ */
+describe('isSearchIndexFresh', () => {
+  const meta = (overrides: Partial<Parameters<typeof isSearchIndexFresh>[0]> = {}) => ({
+    updatedAt: 1,
+    version: 1,
+    totalSections: 3,
+    complete: true,
+    navHash: '',
+    ...overrides,
+  });
+  const book = (metadata?: Record<string, string>) =>
+    ({ ...makeBook('fresh', 'Fresh Book'), metadata }) as Book;
+
+  it('keeps a previous-version index for a book with no source column', () => {
+    expect(isSearchIndexFresh(meta({ version: 1 }), book())).toBe(true);
+  });
+
+  it('rebuilds a previous-version index for a translation, which has one', () => {
+    expect(isSearchIndexFresh(meta({ version: 1 }), book({ translationOf: 'abc' }))).toBe(false);
+  });
+
+  it('rebuilds for a book that names its source language', () => {
+    expect(isSearchIndexFresh(meta({ version: 1 }), book({ sourceLanguage: 'la' }))).toBe(false);
+  });
+
+  it('keeps a current-version index either way', () => {
+    expect(isSearchIndexFresh(meta({ version: SEARCH_INDEX_VERSION }), book())).toBe(true);
+    expect(
+      isSearchIndexFresh(meta({ version: SEARCH_INDEX_VERSION }), book({ translationOf: 'abc' })),
+    ).toBe(true);
+  });
+
+  it('never keeps an incomplete index, or one from a different edition of the book', () => {
+    expect(isSearchIndexFresh(meta({ complete: false }), book())).toBe(false);
+    expect(isSearchIndexFresh(meta({ updatedAt: 2 }), book())).toBe(false);
+    expect(isSearchIndexFresh(null, book())).toBe(false);
   });
 });

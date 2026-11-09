@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { FaChevronDown, FaSearch } from 'react-icons/fa';
 import { MdManageSearch, MdOutlineDonutLarge } from 'react-icons/md';
 import { PiPlus } from 'react-icons/pi';
@@ -87,6 +87,24 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onSearchQueryChange(e.target.value);
   };
+
+  // The source-language switch has to flip the instant it is clicked, whatever
+  // else the library is busy with — it is a setting, not a command that waits for
+  // a scan. The page schedules search-config changes as a React transition, and a
+  // controlled switch bound straight to the config can therefore sit visibly
+  // un-flipped while a full-text scan is running. This holds the value the reader
+  // chose, and follows the config whenever it does arrive (the same setting is in
+  // the search-options menu, and a stored one comes back from the URL).
+  const [sourceIncluded, setSourceIncluded] = useState(
+    searchConfig.includeSourceLanguage !== false,
+  );
+  const updateSourceIncluded = (next: boolean) => {
+    setSourceIncluded(next);
+    onSearchConfigChange({ ...searchConfig, includeSourceLanguage: next });
+  };
+  useEffect(() => {
+    setSourceIncluded(searchConfig.includeSourceLanguage !== false);
+  }, [searchConfig.includeSourceLanguage]);
 
   const windowButtonVisible = appService?.hasWindowBar && !isTrafficLightVisible;
   const currentBooksCount = currentBookshelf.length;
@@ -293,16 +311,11 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
                 <input
                   type='checkbox'
                   role='switch'
-                  aria-checked={searchConfig.includeSourceLanguage !== false}
+                  aria-checked={sourceIncluded}
                   aria-label={_('Include original source language in search?')}
                   className='toggle toggle-sm'
-                  checked={searchConfig.includeSourceLanguage !== false}
-                  onChange={(event) =>
-                    onSearchConfigChange({
-                      ...searchConfig,
-                      includeSourceLanguage: event.target.checked,
-                    })
-                  }
+                  checked={sourceIncluded}
+                  onChange={(event) => updateSourceIncluded(event.target.checked)}
                 />
               </label>
             )}

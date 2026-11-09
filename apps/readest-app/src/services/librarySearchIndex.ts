@@ -14,6 +14,39 @@ import { foldValue } from '@/utils/containsSearch';
  */
 export const SEARCH_INDEX_VERSION = 2;
 
+/**
+ * The index versions this build can still READ.
+ *
+ * Version 2 only added the source-free copy of a section's text — what the
+ * 'English only' search option matches against. Nothing about the original
+ * columns (idx, label, text, folded) changed, so a version 1 index is exactly as
+ * readable as it ever was, and a rebuild is only worth paying for where there is
+ * something to store: a book with a work's own language set beside the English.
+ *
+ * That distinction matters more than it looks. Bumping the version invalidated
+ * every index in the library at once, and a rebuild means re-opening the book
+ * file, re-parsing every section and re-extracting its text — for the ~190 books
+ * with no source column, all of it to add a column nothing will ever read.
+ */
+const READABLE_INDEX_VERSIONS = [1, SEARCH_INDEX_VERSION];
+
+/**
+ * Does this book have a source column for the source-free copy to hold?
+ *
+ * A translation says so by pointing at the work it translates; a book parsed
+ * since this option existed also carries the language read off its own column
+ * headings. A book with neither keeps the index it has — the option simply
+ * behaves as if it were on for that one book.
+ */
+const storesSourceFreeText = (book: Book): boolean =>
+  !!book.metadata?.translationOf || !!book.metadata?.sourceLanguage;
+
+export const isSearchIndexFresh = (meta: SearchIndexMeta | null, book: Book): boolean => {
+  if (!meta || !meta.complete || meta.updatedAt !== book.updatedAt) return false;
+  if (meta.version === SEARCH_INDEX_VERSION) return true;
+  return !storesSourceFreeText(book) && READABLE_INDEX_VERSIONS.includes(meta.version);
+};
+
 // Maximal folding (caseless + diacriticless) with the default locale: any
 // occurrence under any stricter search config folds into an occurrence in
 // this form, so a LIKE over the folded needle is a superset prefilter for
@@ -75,12 +108,6 @@ export const readSearchIndexMeta = async (db: DatabaseService): Promise<SearchIn
     navHash: row.nav_hash,
   };
 };
-
-export const isSearchIndexFresh = (meta: SearchIndexMeta | null, book: Book): boolean =>
-  !!meta &&
-  meta.complete &&
-  meta.version === SEARCH_INDEX_VERSION &&
-  meta.updatedAt === book.updatedAt;
 
 export const beginSearchIndex = async (
   db: DatabaseService,
