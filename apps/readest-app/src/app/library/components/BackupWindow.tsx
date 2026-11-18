@@ -53,6 +53,9 @@ export const BackupWindow: React.FC<BackupWindowProps> = ({ onPullLibrary }) => 
   const [errorMessage, setErrorMessage] = useState('');
   const [result, setResult] = useState<BackupResult | null>(null);
   const [includeCredentials, setIncludeCredentials] = useState(false);
+  // On by default: a "backup" that omits the books themselves is not a backup
+  // of the library, and its restore yields cards that cannot be opened.
+  const [includeBookFiles, setIncludeBookFiles] = useState(true);
 
   const resetState = () => {
     setStatus('idle');
@@ -95,7 +98,7 @@ export const BackupWindow: React.FC<BackupWindowProps> = ({ onPullLibrary }) => 
       const saved = await saveBackupFile(
         appService,
         filename,
-        { includeCredentials },
+        { includeCredentials, includeBookFiles },
         (current, total, currentFile) => {
           setProgress({ current, total, currentFile });
         },
@@ -192,6 +195,20 @@ export const BackupWindow: React.FC<BackupWindowProps> = ({ onPullLibrary }) => 
                   'Create a backup of your library and settings or restore from a previous backup. Restoring will merge with your current library.',
                 )}
               </p>
+
+              <label className='flex cursor-pointer items-start gap-2'>
+                <input
+                  type='checkbox'
+                  checked={includeBookFiles}
+                  onChange={(e) => setIncludeBookFiles(e.target.checked)}
+                  className='checkbox checkbox-sm mt-0.5 shrink-0'
+                />
+                <span className='text-base-content/70 text-sm'>
+                  {_(
+                    'Include the book files as well as the library (a full copy, readable on another device). Turn this off for a smaller backup of just the library, covers and reading progress.',
+                  )}
+                </span>
+              </label>
 
               <label className='flex cursor-pointer items-start gap-2'>
                 <input

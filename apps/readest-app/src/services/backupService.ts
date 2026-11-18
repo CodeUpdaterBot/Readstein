@@ -1,5 +1,5 @@
 import type { Configuration, ZipWriter } from '@zip.js/zip.js';
-import { AppService } from '@/types/system';
+import { AppService, BaseDir } from '@/types/system';
 import { EXTS } from '@/libs/document';
 import { isTauriAppPlatform } from '@/services/environment';
 import { Book, BookConfig, BookNote } from '@/types/book';
@@ -24,6 +24,16 @@ export interface BackupOptions {
    * defaults to false.
    */
   includeCredentials?: boolean;
+  /**
+   * Include the books themselves — not just their covers and reading config.
+   *
+   * Books held in place (a Home Library folder, or a PDF never copied into the
+   * app's storage) have no file under `Books/<hash>/`, so the directory walk
+   * below picks up their cover and their config and leaves the book behind.
+   * The result restores to a shelf of unopenable cards. Defaults to true, so a
+   * backup is a full copy of the library; set false for a metadata-only zip.
+   */
+  includeBookFiles?: boolean;
 }
 
 /**
@@ -328,20 +338,62 @@ export async function addBackupEntriesToZip(
   // backslash (e.g. `hash\cover.png`). Zip entry names must use forward
   // slashes so the backup restores on every platform — restore matches a
   // book's files by `${hash}/` (see `restoreFromBackupZip`). Issue #4703.
-  const bookFiles = files
+  type BackupEntry = { path: string; base: BaseDir; entryName: string };
+  const bookFiles: BackupEntry[] = files
     .filter((file) => file.size > 0 && isExported(file.path))
-    .map((file) => ({ file, entryName: file.path.replace(/\\/g, '/') }));
-  const total = bookFiles.length;
+    .map((file) => ({
+      path: file.path,
+      base: 'Books' as BaseDir,
+      entryName: file.path.replace(/\\/g, '/'),
+    }));
 
-  for (let i = 0; i < bookFiles.length; i++) {
-    const { file, entryName } = bookFiles[i]!;
-    onProgress?.(i + 1, total, file.path);
+  // Books held in place — a Home Library folder, or a file never copied into
+  // the app's storage — have no book file under `Books/<hash>/`: the walk above
+  // finds their cover and their config and leaves the book itself behind, so the
+  // backup restores to a shelf of cards that cannot be opened. Each such book's
+  // own file is added under its hash dir, which is where restore looks for it.
+  //
+  // The test is whether the zip already carries a BOOK FILE for that hash, not
+  // merely whether the hash dir appeared: nearly every hash dir holds a
+  // cover.png, so testing the dir would skip almost every book.
+  const hasBookFileInTree = (hash: string) =>
+    bookFiles.some(
+      (f) =>
+        getBookDirOfPath(f.path) === hash &&
+        BOOK_EXTS.has((f.path.split('.').pop() ?? '').toLowerCase()),
+    );
+  const externalBookFiles: BackupEntry[] = [];
+  if (options.includeBookFiles !== false) {
+    for (const book of books) {
+      if (book.deletedAt || !book.filePath) continue;
+      if (hasBookFileInTree(book.hash)) continue;
+      externalBookFiles.push({
+        path: book.filePath,
+        base: 'None' as BaseDir,
+        entryName: `${book.hash}/${book.filePath.split(/[\\/]/).pop()}`,
+      });
+    }
+  }
+
+  const allEntries = [...bookFiles, ...externalBookFiles];
+  const total = allEntries.length;
+
+  for (let i = 0; i < allEntries.length; i++) {
+    const { path, base, entryName } = allEntries[i]!;
+    onProgress?.(i + 1, total, path);
     try {
-      const content = await appService.readFile(file.path, 'Books', 'binary');
+      // A book held in place can be moved or deleted between the backup being
+      // started and this book's turn, so a missing file is skipped, not fatal.
+      if (base === 'None' && !(await appService.exists(path, 'None'))) {
+        console.warn(`Skipping file, no longer present: ${path}`);
+        continue;
+      }
+      const content = await appService.readFile(path, base, 'binary');
       const data = new Uint8Array(content as ArrayBuffer);
+      if (data.byteLength === 0) continue;
       await writer.add(entryName, new Uint8ArrayReader(data), { level: 0 });
     } catch (error) {
-      console.warn(`Skipping file ${file.path}:`, error);
+      console.warn(`Skipping file ${path}:`, error);
     }
   }
 }
@@ -469,6 +521,38 @@ export async function restoreFromBackupZip(
   const revivedBooks: RevivedBook[] = [];
   const total = backupBooks.length + orphanHashes.size;
 
+  /**
+   * Point a restored book at the copy of its file that the zip just extracted.
+   *
+   * A backup carries each book's own file under its hash dir, but the record
+   * inside it still holds the path from the machine the backup was made on —
+   * for a book held in place, a path that does not exist here. Left alone, a
+   * restore produces a shelf of cards that cannot be opened, which is the exact
+   * opposite of a clone.
+   *
+   * A path that DOES resolve is left untouched, so restoring onto the same
+   * machine does not silently move a book from a Home Library folder into the
+   * app's own storage.
+   */
+  const repointToExtracted = async (
+    book: Book,
+    entries: typeof fileEntries,
+  ): Promise<void> => {
+    const current = book.filePath;
+    if (current) {
+      try {
+        if (await appService.exists(current, 'None')) return;
+      } catch {
+        /* unresolvable — fall through and repoint */
+      }
+    }
+    const bookEntry = entries.find((e) =>
+      BOOK_EXTS.has((e.filename.split('.').pop() ?? '').toLowerCase()),
+    );
+    if (!bookEntry) return;
+    book.filePath = await appService.resolveFilePath(bookEntry.filename, 'Books');
+  };
+
   for (let i = 0; i < backupBooks.length; i++) {
     const backupBook = backupBooks[i]!;
     onProgress?.(i + 1, total, backupBook.title);
@@ -503,6 +587,10 @@ export async function restoreFromBackupZip(
         }
       }
 
+      // Point the record at the copy just extracted, when its own path does not
+      // resolve here — the whole point of restoring onto another machine.
+      await repointToExtracted(existingBook, bookFileEntries);
+
       // Merge book metadata (timestamps, deletedAt reconciliation). A book
       // deleted locally but present in the backup is "revived" — collect it
       // so its download state and updatedAt can be fixed up after the loop.
@@ -519,6 +607,7 @@ export async function restoreFromBackupZip(
         const data = await entry.getData!(new Uint8ArrayWriter());
         await appService.writeFile(entry.filename, 'Books', data.buffer as ArrayBuffer);
       }
+      await repointToExtracted(backupBook, bookFileEntries);
       currentBooks.push(backupBook);
       currentBooksMap.set(backupBook.hash, backupBook);
       booksAdded++;
