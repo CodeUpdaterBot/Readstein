@@ -391,9 +391,15 @@ export const nativeFileSystem: FileSystem = {
   async readFile(path: string, base: BaseDir, mode: 'text' | 'binary') {
     const { fp, baseDir } = this.resolvePath(path, base);
 
-    return mode === 'text'
-      ? (readTextFile(fp, baseDir ? { baseDir } : undefined) as Promise<string>)
-      : ((await readFile(fp, baseDir ? { baseDir } : undefined)).buffer as ArrayBuffer);
+    if (mode === 'text') {
+      return readTextFile(fp, baseDir ? { baseDir } : undefined) as Promise<string>;
+    }
+    const data = await readFile(fp, baseDir ? { baseDir } : undefined);
+    // `.buffer` of the returned view can be LARGER than the view itself, so taking it appends
+    // whatever else shares that buffer. A book copied by Backup Library picked up 68 stray bytes
+    // this way (found by a round-trip test, and reproduced exactly by a mock that mirrored this
+    // line). Slicing to the view's own bytes is a no-op whenever the buffer is already exact.
+    return data.slice().buffer as ArrayBuffer;
   },
   async writeFile(path: string, base: BaseDir, content: string | ArrayBuffer | File) {
     // NOTE: this could be very slow for large files and might block the UI thread

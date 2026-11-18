@@ -583,7 +583,7 @@ export async function restoreFromBackupZip(
           await appService.writeFile(entry.filename, 'Books', JSON.stringify(mergedConfig));
         } else {
           // Override book file and cover image
-          await appService.writeFile(entry.filename, 'Books', data.buffer as ArrayBuffer);
+          await appService.writeFile(entry.filename, 'Books', data.slice().buffer as ArrayBuffer);
         }
       }
 
@@ -609,7 +609,7 @@ export async function restoreFromBackupZip(
       }
       for (const entry of bookFileEntries) {
         const data = await entry.getData!(new Uint8ArrayWriter());
-        await appService.writeFile(entry.filename, 'Books', data.buffer as ArrayBuffer);
+        await appService.writeFile(entry.filename, 'Books', data.slice().buffer as ArrayBuffer);
       }
       await repointToExtracted(backupBook, bookFileEntries);
       currentBooks.push(backupBook);
@@ -638,7 +638,7 @@ export async function restoreFromBackupZip(
     }
     for (const entry of orphanEntries) {
       const data = await entry.getData!(new Uint8ArrayWriter());
-      await appService.writeFile(entry.filename, 'Books', data.buffer as ArrayBuffer);
+      await appService.writeFile(entry.filename, 'Books', data.slice().buffer as ArrayBuffer);
     }
 
     // Import the book file from the extracted location
