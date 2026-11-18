@@ -587,16 +587,20 @@ export async function restoreFromBackupZip(
         }
       }
 
-      // Point the record at the copy just extracted, when its own path does not
-      // resolve here — the whole point of restoring onto another machine.
-      await repointToExtracted(existingBook, bookFileEntries);
-
       // Merge book metadata (timestamps, deletedAt reconciliation). A book
       // deleted locally but present in the backup is "revived" — collect it
       // so its download state and updatedAt can be fixed up after the loop.
       const wasRevived = !!existingBook.deletedAt && !backupBook.deletedAt;
       Object.assign(existingBook, mergeBookMetadata(existingBook, backupBook));
       if (wasRevived) revivedBooks.push({ book: existingBook, backup: backupBook });
+
+      // AFTER the merge, never before. mergeBookMetadata takes the WHOLE record
+      // from whichever side has the higher updatedAt, so it carries the backup's
+      // own filePath — the source machine's path — over the top and undoes a
+      // repoint made earlier. Pointing the book at the copy we just extracted
+      // has to be the last word on filePath.
+      await repointToExtracted(existingBook, bookFileEntries);
+
       booksUpdated++;
     } else {
       // Add new book: extract all files
