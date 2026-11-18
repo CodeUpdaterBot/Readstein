@@ -398,9 +398,26 @@ export async function addBackupEntriesToZip(
   }
 }
 
+/**
+ * Configuration for writing a backup zip.
+ *
+ * Both settings here OVERRIDE `configureZip`'s defaults (`useWebWorkers: false`,
+ * `useCompressionStream: false`), which every other zip operation in the app uses.
+ *
+ * A backup is the one zip this app writes that runs for an hour and passes 8 GB, and a
+ * worker-backed writer feeding a long-lived TransformStream did not survive that: two
+ * independent backups of the same library stopped within 2 MB of each other at ~7.92 GB,
+ * having written entry data but no End Of Central Directory record -- a file that cannot
+ * be opened at all. The backup that DID work was 0.93 GB, small enough that it finished
+ * before whatever limit that is.
+ *
+ * Entries are stored uncompressed (`level: 0`), so a compression stream buys nothing here.
+ * Keeping the write on zip.js's own path, on the main event loop, is what a multi-gigabyte
+ * stream needs in order to close cleanly.
+ */
 const ZIP_WRITE_CONFIG: Partial<Configuration> = {
-  useWebWorkers: true,
-  useCompressionStream: true,
+  useWebWorkers: false,
+  useCompressionStream: false,
   chunkSize: 1 * 1024 * 1024, // 1MB chunks for streaming
 };
 
