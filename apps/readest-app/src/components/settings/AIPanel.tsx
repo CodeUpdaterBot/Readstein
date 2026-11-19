@@ -643,7 +643,7 @@ const AIPanel: React.FC = () => {
 
       {provider === 'openrouter' && (
         <BoxedList
-          title={_('OpenAI Compatible Configuration')}
+          title={_('AI Provider & API Key')}
           description={_(
             'Bring your own API key for OpenAI or any OpenAI-compatible endpoint. Also works with Together / Groq / vLLM / OpenRouter and other OpenAI-compatible services. The model list is fetched live from the endpoint you configure.',
           )}

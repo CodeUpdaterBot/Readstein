@@ -115,7 +115,11 @@ const SettingsDialog: React.FC<{ bookKey: string }> = ({ bookKey }) => {
       tab: 'AI',
       icon: PiRobot,
       label: _('AI Assistant'),
-      disabled: process.env.NODE_ENV === 'production',
+      // Deliberately NOT disabled in production builds. The AI assistant itself runs in a
+      // shipped app, but this tab — the only place the provider API key can be entered —
+      // used to be hidden there, so a user could have a working chat with no way to
+      // configure it or to supply their key. The setting and the feature have to be
+      // reachable together.
     },
     {
       tab: 'TTS',
