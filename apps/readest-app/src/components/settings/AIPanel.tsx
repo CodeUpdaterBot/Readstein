@@ -461,7 +461,7 @@ const AIPanel: React.FC = () => {
             disabled={!enabled}
           />
         </SettingsRow>
-        <SettingsRow label={_('AI Gateway (Cloud)')} asLabel>
+        <SettingsRow label={_('OpenRouter')} asLabel>
           <input
             type='radio'
             name='ai-provider'
@@ -554,17 +554,17 @@ const AIPanel: React.FC = () => {
 
       {provider === 'ai-gateway' && (
         <BoxedList
-          title={_('AI Gateway Configuration')}
+          title={_('OpenRouter Configuration')}
           description={_(
-            'Choose from a selection of high-quality, economical AI models. You can also bring your own model by selecting "Custom Model" below.',
+            'Use your own OpenRouter API token. Pick a model from the list, or bring your own by choosing "Custom Model" below. The model list is fetched live from OpenRouter.',
           )}
           className={disabledSection}
         >
           <div className='flex flex-col gap-2 pe-4 py-3'>
             <div className='flex w-full items-center justify-between'>
-              <SettingLabel>{_('API Key')}</SettingLabel>
+              <SettingLabel>{_('OpenRouter API Token')}</SettingLabel>
               <a
-                href='https://vercel.com/docs/ai/ai-gateway'
+                href='https://openrouter.ai/keys'
                 target='_blank'
                 rel='noopener noreferrer'
                 className={clsx('link text-xs', !enabled && 'pointer-events-none')}
