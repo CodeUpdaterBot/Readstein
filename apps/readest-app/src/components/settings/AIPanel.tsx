@@ -461,7 +461,17 @@ const AIPanel: React.FC = () => {
             disabled={!enabled}
           />
         </SettingsRow>
-        <SettingsRow label={_('OpenRouter')} asLabel>
+        <SettingsRow label={_('AI Gateway (Cloud)')} asLabel>
+          <input
+            type='radio'
+            name='ai-provider'
+            className='radio'
+            checked={provider === 'ai-gateway'}
+            onChange={() => setProvider('ai-gateway')}
+            disabled={!enabled}
+          />
+        </SettingsRow>
+        <SettingsRow label={_('OpenAI Compatible')} asLabel>
           <input
             type='radio'
             name='ai-provider'
@@ -633,18 +643,18 @@ const AIPanel: React.FC = () => {
 
       {provider === 'openrouter' && (
         <BoxedList
-          title={_('OpenRouter')}
+          title={_('AI Provider & API Key')}
           description={_(
-            'Use your own OpenRouter API token. The model list is fetched live from OpenRouter, so anything in its catalogue is available. Point the Base URL at any other OpenAI-compatible service (Together, Groq, vLLM, a local server) and this same token field configures that instead.',
+            'Bring your own API key for OpenAI or any OpenAI-compatible endpoint. Also works with Together / Groq / vLLM / OpenRouter and other OpenAI-compatible services. The model list is fetched live from the endpoint you configure.',
           )}
           className={disabledSection}
         >
           {/* API key */}
           <div className='flex flex-col gap-2 pe-4 py-3'>
             <div className='flex w-full items-center justify-between'>
-              <SettingLabel>{_('OpenRouter API Token')}</SettingLabel>
+              <SettingLabel>{_('API Key')}</SettingLabel>
               <a
-                href='https://openrouter.ai/keys'
+                href='https://platform.openai.com/api-keys'
                 target='_blank'
                 rel='noopener noreferrer'
                 className={clsx('link text-xs', !enabled && 'pointer-events-none')}

@@ -5,31 +5,9 @@ import { aiLogger } from '../logger';
 import { AI_TIMEOUTS } from '../utils/retry';
 import { getAIFetch } from '../utils/httpFetch';
 
-const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
-/**
- * The endpoint this option used to default to.
- *
- * A saved value equal to this is the old default rather than a deliberate choice — it was
- * never shown as one of the offered providers — so it is migrated to OpenRouter's endpoint
- * on read. A base URL pointing anywhere else is respected, because the field accepts any
- * OpenAI-compatible service.
- */
-const LEGACY_OPENAI_DEFAULT = 'https://api.openai.com/v1';
+const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 const DEFAULT_MODEL = 'gpt-5.6-luna';
 const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
-
-/**
- * The endpoint to use for a saved base URL.
- *
- * Empty, or the old OpenAI default, means "not chosen" — that value was never offered as a
- * provider, so it is migrated to OpenRouter rather than kept. Anything else is respected:
- * this field accepts any OpenAI-compatible service, which is why the setting is a URL at all.
- */
-function resolveBaseUrl(saved: string | undefined): string {
-  const trimmed = (saved || '').replace(/\/+$/, '');
-  if (!trimmed || trimmed === LEGACY_OPENAI_DEFAULT) return DEFAULT_BASE_URL;
-  return trimmed;
-}
 
 /**
  * Provider for any OpenAI-compatible /v1/chat/completions endpoint, with
@@ -62,7 +40,7 @@ export class OpenRouterProvider implements AIProvider {
       throw new Error('OpenRouter API key required');
     }
     this.apiKey = settings.openrouterApiKey;
-    this.baseUrl = resolveBaseUrl(settings.openrouterBaseUrl);
+    this.baseUrl = (settings.openrouterBaseUrl || DEFAULT_BASE_URL).replace(/\/+$/, '');
     this.httpFetch = getAIFetch();
     this.client = createOpenAICompatible({
       name: 'openrouter',
@@ -146,7 +124,7 @@ export async function fetchOpenRouterModels(
   apiKey: string,
   signal?: AbortSignal,
 ): Promise<OpenRouterModelInfo[]> {
-  const trimmed = resolveBaseUrl(baseUrl);
+  const trimmed = (baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, '');
   const url = `${trimmed}/models`;
   const httpFetch = getAIFetch();
   const response = await httpFetch(url, {
