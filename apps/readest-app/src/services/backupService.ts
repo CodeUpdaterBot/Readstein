@@ -291,6 +291,86 @@ export function reviveRestoredBooks(revived: RevivedBook[], now: number = Date.n
 type ProgressCallback = (current: number, total: number, filename: string) => void;
 
 /**
+ * How much of one file is held in memory at a time while it is added to the zip.
+ *
+ * The number that matters is not speed, it is the peak. A backup that reads a book whole
+ * allocates that book's size, so a multi-gigabyte book is a multi-gigabyte allocation in
+ * the middle of an already-large job. On a 32 GB machine this was observed as ~22 GB in
+ * use, a stall at ~7.9 GB of zip, and a hard process fault (KERNELBASE.dll, 0xe0000008)
+ * three runs in a row at the same byte — memory exhaustion, not a bad file.
+ */
+const BACKUP_READ_CHUNK = 1024 * 1024;
+
+/**
+ * The part of `NativeFile` this module needs, typed structurally and reached through a
+ * dynamic import so that `@tauri-apps/plugin-fs` is not pulled in at load time — that
+ * import fails outside the app and took the whole backup suite down with it.
+ */
+interface ChunkedReadable {
+  size: number;
+  readData(start: number, end: number): Promise<ArrayBuffer>;
+  close(): Promise<void>;
+}
+
+/**
+ * A zip.js `Reader` over a file read from disk in bounded slices.
+ *
+ * zip.js asks a reader for byte ranges (`readUint8Array(index, length)`), and
+ * `NativeFile.readData` reads exactly such a range — so the file never has to exist in
+ * memory as a whole, only the slice currently being consumed.
+ */
+class ChunkedFileReader {
+  private file: ChunkedReadable;
+
+  constructor(file: ChunkedReadable) {
+    this.file = file;
+  }
+
+  get size() {
+    return this.file.size;
+  }
+
+  async init(): Promise<void> {
+    /* opened by the caller */
+  }
+
+  async readUint8Array(index: number, length: number): Promise<Uint8Array> {
+    const end = Math.min(index + length, this.file.size);
+    const start = Math.min(index, end);
+    // Cap the slice even when zip.js asks for more, so a single request cannot pull a
+    // whole book into memory.
+    const cappedEnd = Math.min(end, start + BACKUP_READ_CHUNK);
+    const buffer = await this.file.readData(start, cappedEnd);
+    return new Uint8Array(buffer);
+  }
+}
+
+/**
+ * Open a file for chunked reading, or null when it cannot be read that way here.
+ *
+ * Returning null is normal, not an error: a `content://` URI (Android "Open with
+ * Readest"), a file moved since the library was saved, a permission, or a test
+ * environment with no native file layer. Callers fall back to reading the file whole,
+ * which is what happened before this existed.
+ */
+async function openForChunkedRead(
+  appService: AppService,
+  path: string,
+  base: BaseDir,
+): Promise<ChunkedReadable | null> {
+  try {
+    const absolute = base === 'None' ? path : await appService.resolveFilePath(path, 'Books');
+    const { NativeFile } = await import('@/utils/file');
+    const file = new NativeFile(absolute);
+    await file.open();
+    return file.size > 0 ? file : null;
+  } catch (error) {
+    console.warn(`Backup: cannot stream ${path}, will read it whole`, error);
+    return null;
+  }
+}
+
+/**
  * Shared logic: add all library entries to a ZipWriter.
  */
 export async function addBackupEntriesToZip(
@@ -382,8 +462,28 @@ export async function addBackupEntriesToZip(
     const { path, base, entryName } = allEntries[i]!;
     onProgress?.(i + 1, total, path);
     try {
-      // A book held in place can be moved or deleted between the backup being
-      // started and this book's turn, so a missing file is skipped, not fatal.
+      // A book can be multi-gigabyte, so it is streamed from disk one slice at a time and
+      // never exists in memory as a whole. Covers, configs and the small per-book
+      // databases are read in one go, as they always were.
+      const isBookFile = BOOK_EXTS.has((path.split('.').pop() ?? '').toLowerCase());
+      if (isBookFile) {
+        const file = await openForChunkedRead(appService, path, base);
+        if (file) {
+          try {
+            await writer.add(
+              entryName,
+              new ChunkedFileReader(file) as unknown as Parameters<ZipWriter<unknown>['add']>[1],
+              { level: 0 },
+            );
+            continue;
+          } finally {
+            await file.close();
+          }
+        }
+        // Fall through: streaming was not possible, so read it whole as before.
+      }
+      // A book held in place can be moved or deleted between the backup being started and
+      // this book's turn, so a missing file is skipped, not fatal.
       if (base === 'None' && !(await appService.exists(path, 'None'))) {
         console.warn(`Skipping file, no longer present: ${path}`);
         continue;
@@ -393,6 +493,7 @@ export async function addBackupEntriesToZip(
       if (data.byteLength === 0) continue;
       await writer.add(entryName, new Uint8ArrayReader(data), { level: 0 });
     } catch (error) {
+      // One unreadable file must never end a backup.
       console.warn(`Skipping file ${path}:`, error);
     }
   }
