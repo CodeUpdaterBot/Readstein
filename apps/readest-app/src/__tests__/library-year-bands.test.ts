@@ -165,7 +165,7 @@ describe('band lookup', () => {
   });
 });
 
-describe('years before Christ', () => {
+describe('years before the era', () => {
   it('reads BC metadata as negative years, so the timeline can cross the era', () => {
     expect(parseYear('300 BC')).toBe(-300);
     expect(parseYear('300 BCE')).toBe(-300);
@@ -174,12 +174,17 @@ describe('years before Christ', () => {
     expect(parseYear(2024)).toBe(2024);
     expect(parseYear('c. 310-315')).toBe(310);
     expect(parseYear('')).toBeNull();
+    // House style: a year before the era is written with a minus sign, and the era is AD.
+    // Reading it must NOT take the absolute value, or the oldest work on the shelf would
+    // be plotted as the newest.
+    expect(parseYear('-300 AD')).toBe(-300);
+    expect(parseYear('-1500 AD')).toBe(-1500);
   });
 
-  it('labels BC years and ranges chronologically rather than flipping them', () => {
-    expect(formatYearLabel(-300)).toBe('300 BC');
-    expect(formatYearBandLabel(-400, -300)).toBe('400\u2013300 BC');
-    expect(formatYearBandLabel(-300, 100)).toBe('300 BC\u2013100');
+  it('labels years before the era with a minus sign, in the same direction as their numbers', () => {
+    expect(formatYearLabel(-300)).toBe('-300 AD');
+    expect(formatYearBandLabel(-400, -300)).toBe('-400\u2013-300 AD');
+    expect(formatYearBandLabel(-300, 100)).toBe('-300\u2013100 AD');
     expect(formatYearBandLabel(1405, 1405)).toBe('1405');
   });
 
@@ -192,7 +197,7 @@ describe('years before Christ', () => {
     ];
     const bands = buildUniformYearBands(collectDatedWorks(books), 10);
     expect(bands[0]!.lo).toBeLessThan(0);
-    expect(bands[0]!.label).toContain('BC');
+    expect(bands[0]!.label).toContain('AD');
     for (const band of bands) expect(band.works.length).toBeGreaterThan(0);
     const covered = new Set(bands.flatMap((band) => band.works.map((work) => work.year)));
     expect(covered.size).toBe(4);

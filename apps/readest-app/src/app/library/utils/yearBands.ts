@@ -70,19 +70,24 @@ export const parseYear = (value: unknown): number | null => {
   const isBeforeChrist = /\b(?:bc|bce)\b/i.test(text);
   const isAnnoDomini = /\b(?:ad|ce)\b/i.test(text);
   if (isBeforeChrist && year > 0) return -year;
-  if (isAnnoDomini && year < 0) return Math.abs(year);
+  // A year written with the era keeps the sign it was written with, because the era marker
+  // names the calendar and not the direction: "-500 AD" is a year before the era, the same
+  // fact as "500 BC". Taking the absolute value here would flip a negative year positive
+  // and send the oldest works to the newest end of the timeline.
+  if (isAnnoDomini) return year;
   return year;
 };
 
-/** A single year, written with its era. */
-export const formatYearLabel = (year: number): string => (year < 0 ? `${-year} BC` : `${year}`);
+/** A single year, written with its era: a year before the era carries a minus sign. */
+export const formatYearLabel = (year: number): string => (year < 0 ? `${year} AD` : `${year}`);
 
 export const formatYearBandLabel = (lo: number, hi: number): string => {
   if (lo === hi) return formatYearLabel(lo);
-  // Both ends before Christ read chronologically ("400-300 BC"), so the signs come
-  // off and the order is preserved rather than flipped.
-  if (lo < 0 && hi < 0) return `${-lo}\u2013${-hi} BC`;
-  if (lo < 0) return `${-lo} BC\u2013${hi}`;
+  // Years before the era keep their sign, so a range always reads in the same direction as
+  // its numbers ("-400–-300 AD" runs the same way "-400 < -300" does) and the oldest band
+  // sits at the bottom of the scroll rather than being re-spelled into a positive number.
+  // A range that crosses into the modern era names the era once, at the end.
+  if (lo < 0 || hi < 0) return `${lo}\u2013${hi} AD`;
   return `${lo}\u2013${hi}`;
 };
 
