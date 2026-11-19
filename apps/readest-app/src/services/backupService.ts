@@ -374,6 +374,87 @@ async function openForChunkedRead(
 }
 
 /**
+ * Where a streamed entry's bytes go.
+ *
+ * Injectable on purpose. The streaming path cannot run under vitest (it needs the native
+ * file layer), and code that only ever executes in production is code that ships broken —
+ * a lookalike reader object already cost one release with no books in it. Passing the
+ * opener in lets a test drive this loop with a fake sink and assert the bytes.
+ */
+export interface EntrySink {
+  write(chunk: Uint8Array): Promise<void>;
+  close(): Promise<void>;
+}
+
+export type EntrySinkOpener = (path: string) => Promise<EntrySink | null>;
+
+/**
+ * Open a sink over a Books-relative path, or null when it cannot be streamed to here.
+ *
+ * Null is a normal answer, not a failure: an Android `content://` target, a scope that
+ * refuses the path, or a test environment with no native layer. The caller then writes
+ * the entry whole, which is what happened before this existed.
+ */
+async function openEntrySink(path: string, absolute: string): Promise<EntrySink | null> {
+  try {
+    const { open } = await import('@tauri-apps/plugin-fs');
+    const handle = await open(absolute, { write: true, create: true, truncate: true });
+    return {
+      write: async (chunk) => {
+        await handle.write(chunk);
+      },
+      close: async () => {
+        await handle.close();
+      },
+    };
+  } catch (error) {
+    // A restore must not fail because it fell back to a slower route. The warning names
+    // the path so a stuck restore can be traced to a file rather than to "the backup".
+    console.warn(`Restore: cannot stream to ${path}, writing it whole`, error);
+    return null;
+  }
+}
+
+/** The production opener: resolve the path, then try to open a sink over it. */
+function nativeEntrySinkOpener(appService: AppService): EntrySinkOpener {
+  return async (path) => openEntrySink(path, await appService.resolveFilePath(path, 'Books'));
+}
+
+/**
+ * Write one zip entry to a file under Books/.
+ *
+ * A book's file can be over a gigabyte, and reading it whole to then write it whole makes
+ * the restore's memory track the fattest book in the library — the same shape that killed
+ * the export twice. When a sink can be opened, zip.js pumps the entry into it in slices
+ * (it accepts a WritableStream), so peak memory is one chunk rather than one book.
+ */
+export async function writeEntryToBooks(
+  appService: AppService,
+  entry: { filename: string; getData?: (...args: never[]) => Promise<unknown> },
+  sinkOpener: EntrySinkOpener,
+): Promise<void> {
+  const sink = await sinkOpener(entry.filename);
+  if (sink) {
+    try {
+      // zip.js accepts a WritableStream as the destination, so the entry is pumped into
+      // the sink in slices rather than assembled in memory first.
+      await entry.getData!(
+        new WritableStream<Uint8Array>({
+          write: (chunk) => sink.write(chunk),
+        }) as never,
+      );
+      return;
+    } finally {
+      await sink.close();
+    }
+  }
+  // No sink here: write the entry whole, exactly as the restore always did.
+  const { Uint8ArrayWriter } = await import('@zip.js/zip.js');
+  const data = (await entry.getData!(new Uint8ArrayWriter() as never)) as Uint8Array;
+  await appService.writeFile(entry.filename, 'Books', data.slice().buffer as ArrayBuffer);
+}
+
+/**
  * Shared logic: add all library entries to a ZipWriter.
  */
 export async function addBackupEntriesToZip(
@@ -674,6 +755,9 @@ export async function restoreFromBackupZip(
     book.filePath = await appService.resolveFilePath(bookEntry.filename, 'Books');
   };
 
+  // Open sinks through the native layer where possible; a book file may be a gigabyte.
+  const sinkOpener = nativeEntrySinkOpener(appService);
+
   for (let i = 0; i < backupBooks.length; i++) {
     const backupBook = backupBooks[i]!;
     onProgress?.(i + 1, total, backupBook.title);
@@ -687,9 +771,9 @@ export async function restoreFromBackupZip(
     if (existingBook) {
       // Update: override book file and cover, merge config
       for (const entry of bookFileEntries) {
-        const data = await entry.getData!(new Uint8ArrayWriter());
-
         if (entry.filename.endsWith('/config.json')) {
+          // Small, and must be parsed as text to merge — read it whole.
+          const data = await entry.getData!(new Uint8ArrayWriter());
           // Merge config
           let currentConfig: Partial<BookConfig> = {};
           try {
@@ -703,8 +787,9 @@ export async function restoreFromBackupZip(
           const mergedConfig = mergeBookConfigs(currentConfig, backupConfig);
           await appService.writeFile(entry.filename, 'Books', JSON.stringify(mergedConfig));
         } else {
-          // Override book file and cover image
-          await appService.writeFile(entry.filename, 'Books', data.slice().buffer as ArrayBuffer);
+          // Override the book file or cover. The book file can be huge, so it is streamed
+          // rather than read whole into memory.
+          await writeEntryToBooks(appService, entry, sinkOpener);
         }
       }
 
@@ -729,8 +814,7 @@ export async function restoreFromBackupZip(
         await appService.createDir(bookDir, 'Books');
       }
       for (const entry of bookFileEntries) {
-        const data = await entry.getData!(new Uint8ArrayWriter());
-        await appService.writeFile(entry.filename, 'Books', data.slice().buffer as ArrayBuffer);
+        await writeEntryToBooks(appService, entry, sinkOpener);
       }
       await repointToExtracted(backupBook, bookFileEntries);
       currentBooks.push(backupBook);
@@ -758,8 +842,7 @@ export async function restoreFromBackupZip(
       await appService.createDir(hash, 'Books');
     }
     for (const entry of orphanEntries) {
-      const data = await entry.getData!(new Uint8ArrayWriter());
-      await appService.writeFile(entry.filename, 'Books', data.slice().buffer as ArrayBuffer);
+      await writeEntryToBooks(appService, entry, sinkOpener);
     }
 
     // Import the book file from the extracted location

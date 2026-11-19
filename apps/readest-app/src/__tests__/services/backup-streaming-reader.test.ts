@@ -13,7 +13,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { ZipWriter, ZipReader, Uint8ArrayReader, Uint8ArrayWriter } from '@zip.js/zip.js';
-import { ChunkedFileReader } from '@/services/backupService';
+import { ChunkedFileReader, writeEntryToBooks } from '@/services/backupService';
 
 /** A file that yields byte ranges, standing in for something on disk. */
 function fakeFile(bytes: Uint8Array) {
@@ -80,5 +80,77 @@ describe('backup streaming reader', () => {
     }
     expect(threw).toBe(true);
     await writer.close();
+  });
+
+  /**
+   * The restore side. Entries used to be read whole and written whole, so restoring on a
+   * phone meant holding the fattest book in the library in memory. The sink is injected so
+   * this path — which in production needs the native file layer — can be exercised here.
+   */
+  async function oneEntryZip(bytes: Uint8Array) {
+    const writer = new ZipWriter(new Uint8ArrayWriter());
+    await writer.add('hash/big.pdf', new Uint8ArrayReader(bytes), { level: 0 });
+    const archive = await writer.close();
+    const zip = new ZipReader(new Uint8ArrayReader(archive));
+    const [entry] = await zip.getEntries();
+    return { entry, zip };
+  }
+
+  it('streams an entry out through the sink in bounded chunks, never whole', async () => {
+    const bytes = new Uint8Array(2 * 1024 * 1024 + 99);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 7) % 253;
+    const { entry, zip } = await oneEntryZip(bytes);
+
+    const chunks: Uint8Array[] = [];
+    const wholeWrites: Uint8Array[] = [];
+    const appService = {
+      writeFile: async (_p: string, _b: string, content: ArrayBuffer) => {
+        wholeWrites.push(new Uint8Array(content));
+      },
+    };
+
+    await writeEntryToBooks(
+      appService as never,
+      entry as never,
+      async () => ({
+        write: async (chunk: Uint8Array) => {
+          chunks.push(new Uint8Array(chunk));
+        },
+        close: async () => {},
+      }),
+    );
+
+    const joined = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+    let offset = 0;
+    for (const c of chunks) {
+      joined.set(c, offset);
+      offset += c.length;
+    }
+    expect(joined.length).toBe(bytes.length);
+    expect(Array.from(joined)).toEqual(Array.from(bytes));
+    // The point of the exercise: more than one chunk, and no chunk the size of the file.
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(Math.max(...chunks.map((c) => c.length))).toBeLessThan(bytes.length);
+    // ...and it did not quietly take the whole-file route instead.
+    expect(wholeWrites.length).toBe(0);
+    await zip.close();
+  });
+
+  it('falls back to a single whole write when no sink can be opened', async () => {
+    const bytes = new Uint8Array([9, 8, 7, 6, 5, 4, 3, 2, 1]);
+    const { entry, zip } = await oneEntryZip(bytes);
+
+    const wholeWrites: Uint8Array[] = [];
+    const appService = {
+      writeFile: async (_p: string, _b: string, content: ArrayBuffer) => {
+        wholeWrites.push(new Uint8Array(content));
+      },
+    };
+
+    await writeEntryToBooks(appService as never, entry as never, async () => null);
+
+    expect(wholeWrites.length).toBe(1);
+    expect(Array.from(wholeWrites[0]!)).toEqual(Array.from(bytes));
+    await zip.close();
   });
 });
