@@ -30,9 +30,12 @@ export const DEFAULT_AI_SETTINGS: AISettings = {
   aiGatewayModel: 'google/gemini-2.5-flash-lite',
   aiGatewayEmbeddingModel: 'openai/text-embedding-3-small',
 
-  openrouterBaseUrl: 'https://api.openai.com/v1',
-  openrouterModel: 'gpt-5.6-luna',
-  openrouterEmbeddingModel: 'text-embedding-3-small',
+  // OpenRouter's own endpoint and model-id shape. These used to point at api.openai.com,
+  // which made the option labelled "OpenAI Compatible" the thing you landed on when you
+  // picked a provider — while the OpenRouter endpoint itself was never offered.
+  openrouterBaseUrl: 'https://openrouter.ai/api/v1',
+  openrouterModel: 'google/gemini-2.5-flash-lite',
+  openrouterEmbeddingModel: 'openai/text-embedding-3-small',
 
   spoilerProtection: false,
   maxContextChunks: 10,
