@@ -1,4 +1,5 @@
 import type { Configuration, ZipWriter } from '@zip.js/zip.js';
+import { Reader } from '@zip.js/zip.js';
 import { AppService, BaseDir } from '@/types/system';
 import { EXTS } from '@/libs/document';
 import { isTauriAppPlatform } from '@/services/environment';
@@ -315,28 +316,30 @@ interface ChunkedReadable {
 /**
  * A zip.js `Reader` over a file read from disk in bounded slices.
  *
- * zip.js asks a reader for byte ranges (`readUint8Array(index, length)`), and
- * `NativeFile.readData` reads exactly such a range — so the file never has to exist in
- * memory as a whole, only the slice currently being consumed.
+ * This MUST extend zip.js's own `Reader` — a plain object with the same methods is not
+ * accepted by the writer, and the failure is a thrown error per entry rather than a
+ * visible one: every streamed book silently vanished from the archive, which is exactly
+ * what happened when this was first written as an object literal. `Uint8ArrayReader` in
+ * zip.js is the model: `super()`, a plain `size` property, and `readUint8Array`.
+ *
+ * zip.js asks a reader for byte ranges, and `NativeFile.readData` reads exactly such a
+ * range, so the file never exists in memory as a whole — only the slice being consumed.
  */
-class ChunkedFileReader {
+export class ChunkedFileReader extends Reader<Uint8Array> {
   private file: ChunkedReadable;
 
   constructor(file: ChunkedReadable) {
+    // The base constructor is typed as taking the data itself, but a streaming reader has
+    // no data to hand it — zip.js's own Uint8ArrayReader calls super() with nothing. An
+    // empty array satisfies the type and is immediately superseded by the real size.
+    super(new Uint8Array(0));
+    this.size = file.size;
     this.file = file;
   }
 
-  get size() {
-    return this.file.size;
-  }
-
-  async init(): Promise<void> {
-    /* opened by the caller */
-  }
-
-  async readUint8Array(index: number, length: number): Promise<Uint8Array> {
-    const end = Math.min(index + length, this.file.size);
-    const start = Math.min(index, end);
+  override async readUint8Array(index: number, length: number): Promise<Uint8Array> {
+    const end = Math.min(index + length, this.size);
+    const start = Math.min(Math.max(index, 0), end);
     // Cap the slice even when zip.js asks for more, so a single request cannot pull a
     // whole book into memory.
     const cappedEnd = Math.min(end, start + BACKUP_READ_CHUNK);
