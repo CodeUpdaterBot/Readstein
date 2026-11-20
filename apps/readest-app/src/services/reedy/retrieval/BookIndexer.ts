@@ -211,8 +211,14 @@ export class BookIndexer {
  * Hosted embedding adapters throw from `dim` until the first `embed()` call.
  * Read it when known; otherwise probe with a tiny sample so indexing can
  * create `vector32(<dim>)` before the real batches start.
+ *
+ * Exported because a caller about to index a whole collection must know the
+ * dimension up front — to reset a stale table rather than fail every item.
  */
-async function resolveEmbeddingDim(model: EmbeddingModel, signal?: AbortSignal): Promise<number> {
+export async function resolveEmbeddingDim(
+  model: EmbeddingModel,
+  signal?: AbortSignal,
+): Promise<number> {
   try {
     const dim = model.dim;
     if (Number.isInteger(dim) && dim > 0) return dim;

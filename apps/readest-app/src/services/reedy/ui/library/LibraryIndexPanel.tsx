@@ -57,6 +57,15 @@ export function LibraryIndexPanel({
           {progress.empty > 0 && <span>{progress.empty} no text</span>}
           {progress.failed > 0 && <span>{progress.failed} failed</span>}
         </div>
+        {progress.notice ? (
+          <p className='text-base-content/60 max-w-[19rem] text-[11px]'>{progress.notice}</p>
+        ) : null}
+        {progress.lastError ? (
+          <div className='max-w-[20rem]'>
+            <p className='text-base-content/50 mb-0.5 text-[10px] uppercase'>Last error</p>
+            <p className='text-red-600 text-[11px] break-words'>{progress.lastError}</p>
+          </div>
+        ) : null}
         <button className='btn btn-ghost btn-xs text-xs' onClick={onCancel}>
           Stop
         </button>

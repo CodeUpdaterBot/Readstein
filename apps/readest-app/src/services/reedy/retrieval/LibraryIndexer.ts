@@ -4,6 +4,7 @@ import type { ReedyDb } from '../db/ReedyDb';
 import type { BookIndexer } from './BookIndexer';
 import type { EmbeddingModel } from '../models/EmbeddingModel';
 import { resolveLibraryCorpus, type CorpusCandidate, type CorpusDecision } from './libraryDedup';
+import { resolveEmbeddingDim } from './BookIndexer';
 
 /**
  * Load one library book's document. Injected rather than imported so the
@@ -24,6 +25,17 @@ export interface LibraryIndexProgress {
   skipped: number;
   empty: number;
   failed: number;
+  /**
+   * Why the most recent book failed. Surfaced so a run that fails every book
+   * (a provider that is down, an unreadable file) is diagnosable from the UI
+   * instead of being an unexplained tally.
+   */
+  lastError?: string;
+  /**
+   * One-off message about the corpus as a whole (e.g. a stale index discarded
+   * because the embedding model changed), shown alongside the progress.
+   */
+  notice?: string;
 }
 
 /** Classes excluded from a translation's chunk text so the corpus stays English. */
@@ -44,6 +56,11 @@ export interface LibraryIndexReport {
   notEnglish: number;
   /** Indexed works removed because they are no longer in the library. */
   pruned: number;
+  /**
+   * Set when a stale index was discarded because the embedding model changed
+   * (its vectors are unusable at the new dimension) — human-readable, for the UI.
+   */
+  resetReason: string | null;
   /** Per-record outcome, so a UI can show what was merged or dropped. */
   decisions: CorpusDecision[];
   aborted: boolean;
@@ -108,15 +125,32 @@ export class LibraryIndexer {
       failed: 0,
       notEnglish: decisions.filter((d) => d.reason === 'not-english').length,
       pruned: 0,
+      resetReason: null,
       decisions,
       aborted: false,
     };
+    let lastError: string | undefined;
+    let consecutiveSameError = 0;
 
     // Keep the corpus equal to the library before indexing into it: a work
     // deleted — or replaced, which changes its content-addressed hash — since
     // the last run must not stay retrievable and citable. The prune ignores an
     // empty list, so a partial shelf can never read as "everything was deleted".
     report.pruned = await this.reedy.pruneBooksNotIn(books.map((b) => b.hash));
+
+    // One embedding model per database. If the stored vectors came from a
+    // different model they cannot be compared with the active one, so EVERY book
+    // would fail at `ensureEmbeddingsTable` without embedding a single chunk —
+    // unrecoverable by retrying. Discard the stale index and rebuild it. The
+    // probe also fails once, here, with a real message when the provider is
+    // unreachable, instead of turning that into one failure per book.
+    const dim = await resolveEmbeddingDim(model, options.signal);
+    const existingDim = await this.reedy.embeddingsDim();
+    if (existingDim != null && existingDim !== dim) {
+      await this.reedy.wipeAllData();
+      report.resetReason = `The previous index was built with ${existingDim}-dimensional vectors by a different embedding model, so it could not be reused. It has been cleared and is being rebuilt at ${dim} dimensions.`;
+    }
+    const notice = report.resetReason ?? undefined;
 
     const tally = (): Pick<LibraryIndexProgress, 'indexed' | 'skipped' | 'empty' | 'failed'> => ({
       indexed: report.indexed,
@@ -130,6 +164,7 @@ export class LibraryIndexer {
       bookIndex: 0,
       totalBooks: kept.length,
       bookTitle: '',
+      notice,
       ...tally(),
     });
 
@@ -164,6 +199,8 @@ export class LibraryIndexer {
           totalBooks: kept.length,
           bookTitle: book.title,
           chunkProgress,
+          lastError,
+          notice,
           ...tally(),
         });
 
@@ -186,7 +223,7 @@ export class LibraryIndexer {
         if (after?.indexingStatus === 'empty_index') report.empty++;
         else if (after?.indexingStatus === 'indexed') report.indexed++;
         else report.failed++;
-      } catch {
+      } catch (err) {
         // An abort is not a failure: stop cleanly and leave the book resumable
         // (its status row is whatever BookIndexer last wrote, so a later sweep
         // picks it up again). Any other error is one bad file — carry on so a
@@ -195,7 +232,21 @@ export class LibraryIndexer {
           report.aborted = true;
           break;
         }
+        const message = err instanceof Error ? err.message : String(err);
         report.failed++;
+        if (message === lastError) consecutiveSameError++;
+        else {
+          lastError = message;
+          consecutiveSameError = 1;
+        }
+        // Three identical failures with nothing indexed is not a run of bad
+        // books — it is one cause (provider unreachable, rejected credentials,
+        // stale vectors). Stop and report it rather than repeating it over the
+        // whole shelf.
+        if (report.indexed === 0 && consecutiveSameError >= 3) {
+          emit();
+          break;
+        }
         emit();
       }
       options.onBookDone?.(book);
@@ -206,6 +257,8 @@ export class LibraryIndexer {
       bookIndex: i,
       totalBooks: kept.length,
       bookTitle: '',
+      lastError,
+      notice,
       ...tally(),
     });
 

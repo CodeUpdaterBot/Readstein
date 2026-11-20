@@ -182,6 +182,23 @@ export class ReedyDb {
   // ---------------------------------------------------------------------------
 
   /**
+   * Width of the existing embeddings table, or null when none exists yet.
+   *
+   * The table is a one-model-per-database lock, so callers that are about to
+   * index must compare this against the active model's dim: a mismatch means
+   * every stored vector is unusable and the index has to be rebuilt, not written
+   * into. Read from `sqlite_master` because the width is part of the DDL
+   * (`vector32(<dim>)`) — there is no PRAGMA for it.
+   */
+  async embeddingsDim(): Promise<number | null> {
+    const rows = await this.db.select<{ sql: string | null }>(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='reedy_book_chunk_embeddings'",
+    );
+    const m = rows[0]?.sql?.match(/vector32\s*\(\s*(\d+)\s*\)/i);
+    return m ? Number.parseInt(m[1]!, 10) : null;
+  }
+
+  /**
    * Idempotently create the embeddings table with `vector32(<dim>)`. If the
    * table exists with a different dim, throws — the MVP locks one embedding
    * model per database, so a dim mismatch signals a misuse (e.g. the active

@@ -182,6 +182,12 @@ describe('ReedyDb', () => {
       expect(tables).toHaveLength(1);
     });
 
+    it('reports the embeddings table width, or null when no table exists yet', async () => {
+      expect(await reedy.embeddingsDim()).toBeNull();
+      await reedy.ensureEmbeddingsTable(DIM);
+      expect(await reedy.embeddingsDim()).toBe(DIM);
+    });
+
     it('is idempotent across repeated calls with the same dim', async () => {
       await reedy.ensureEmbeddingsTable(DIM);
       await reedy.ensureEmbeddingsTable(DIM);

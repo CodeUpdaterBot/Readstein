@@ -247,4 +247,33 @@ describe('LibraryIndexer', () => {
     expect(report.pruned).toBe(0);
     expect((await reedy.getBookMeta('keep'))?.indexingStatus).toBe('indexed');
   });
+
+  it('clears a stale index built at a different embedding dimension', async () => {
+    // A previous run (a different embedding model) left the embeddings table
+    // locked to another width. Without this, every book fails at
+    // ensureEmbeddingsTable before embedding a single chunk.
+    await reedy.ensureEmbeddingsTable(8);
+    expect(await reedy.embeddingsDim()).toBe(8);
+
+    const books = [record({ hash: 'a', title: 'Alpha', author: 'A' })];
+    const doc = bookDoc([section('s1', '<p>alpha bravo charlie delta echo foxtrot golf</p>')]);
+    const report = await indexer.run(books, fakeModel(), async () => doc);
+
+    expect(report.resetReason).toContain('8-dimensional');
+    expect(report.indexed).toBe(1);
+    expect(report.failed).toBe(0);
+    expect(await reedy.embeddingsDim()).toBe(DIM);
+  });
+
+  it('stops early when every book fails with the same error', async () => {
+    const books = Array.from({ length: 6 }, (_, i) =>
+      record({ hash: `b${i}`, title: `Work ${i}`, author: 'A' }),
+    );
+    const report = await indexer.run(books, fakeModel(), async () => {
+      throw new Error('provider unreachable');
+    });
+    // One cause, not six bad books: bail after three rather than grinding on.
+    expect(report.failed).toBe(3);
+    expect(report.indexed).toBe(0);
+  });
 });
