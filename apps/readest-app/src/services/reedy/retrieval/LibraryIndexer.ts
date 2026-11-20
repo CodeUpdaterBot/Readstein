@@ -19,8 +19,8 @@ export interface LibraryIndexProgress {
   bookIndex: number;
   totalBooks: number;
   bookTitle: string;
-  /** Per-book embedding progress while a single book is being indexed. */
-  chunkProgress?: { current: number; total: number };
+  /** Per-book progress while one book is being read and embedded. */
+  chunkProgress?: { current: number; total: number; phase: 'chunking' | 'embedding' };
   indexed: number;
   skipped: number;
   empty: number;
@@ -192,7 +192,11 @@ export class LibraryIndexer {
         continue;
       }
 
-      const emit = (chunkProgress?: { current: number; total: number }): void =>
+      const emit = (chunkProgress?: {
+        current: number;
+        total: number;
+        phase: 'chunking' | 'embedding';
+      }): void =>
         options.onProgress?.({
           phase: 'indexing',
           bookIndex: i,
@@ -216,7 +220,7 @@ export class LibraryIndexer {
           // English-only corpus: a Markdown translation contributes its English
           // column, not the Latin/German source it sits beside.
           chunkOptions: { skipClasses: LIBRARY_CORPUS_SKIP_CLASSES },
-          onProgress: (e) => emit({ current: e.current, total: e.total }),
+          onProgress: (e) => emit({ current: e.current, total: e.total, phase: e.phase }),
           signal: options.signal,
         });
         const after = await this.reedy.getBookMeta(book.hash);

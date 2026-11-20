@@ -248,16 +248,22 @@ function buildChunks(
       continue;
     }
 
-    // Round-trip verification is best-effort. EPUB sections almost always
-    // pass; PDF text layers (many absolutely-positioned <span>s from pdf.js)
-    // often fail CFI.toRange even though the text is valid. Dropping those
-    // chunks left OCR'd PDFs as empty_index. Keep the text and store the
-    // generated CFI anyway so chat/indexing still work; navigation may be
-    // slightly off on PDFs.
-    if (!verifyRoundTrip(doc, startInner, startPair) || !verifyRoundTrip(doc, endInner, endPair)) {
+    // Round-trip verification is best-effort, and its RESULT is not acted on:
+    // the chunk is kept either way, because a PDF text layer (many absolutely
+    // positioned <span>s from pdf.js) legitimately fails CFI.toRange even though
+    // its text is valid — dropping those left OCR'd PDFs as empty_index.
+    //
+    // Verifying every chunk costs two DOM range resolutions each, and on a
+    // 441-page PDF that is ~4,000 resolutions plus ~2,000 console warnings —
+    // which, forwarded from the webview one by one in dev, stalled the library
+    // sweep *before it had written a single chunk*. Sample instead: check the
+    // section's first chunk and warn at most once for the whole section.
+    if (
+      position === 0 &&
+      (!verifyRoundTrip(doc, startInner, startPair) || !verifyRoundTrip(doc, endInner, endPair))
+    ) {
       console.warn('[Reedy] chunk_cfi_mismatch: CFI failed round-trip verification', {
         sectionIndex,
-        position,
       });
     }
 

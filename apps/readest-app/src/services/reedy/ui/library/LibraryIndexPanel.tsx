@@ -31,8 +31,13 @@ export function LibraryIndexPanel({
 
   if (status.phase === 'indexing') {
     const { progress } = status;
-    const pct =
+    const chunk = progress.chunkProgress;
+    // The bar tracks the book in flight (reading pages, then embedding them) so
+    // a large PDF visibly moves; the works counter above gives overall position.
+    const bookPct = chunk && chunk.total > 0 ? Math.round((chunk.current / chunk.total) * 100) : 0;
+    const worksPct =
       progress.totalBooks > 0 ? Math.round((progress.bookIndex / progress.totalBooks) * 100) : 0;
+    const pct = chunk ? bookPct : worksPct;
     return (
       <Centered>
         <Loader2Icon className='text-primary size-6 animate-spin' />
@@ -44,6 +49,12 @@ export function LibraryIndexPanel({
           <p className='text-base-content/60 mt-0.5 text-xs'>
             {progress.bookIndex} / {progress.totalBooks} works
           </p>
+          {chunk ? (
+            <p className='text-base-content/50 mt-0.5 text-[11px] tabular-nums'>
+              {chunk.phase === 'chunking' ? 'Reading pages' : 'Embedding'}: {chunk.current} /{' '}
+              {chunk.total}
+            </p>
+          ) : null}
         </div>
         <div className='bg-base-200 h-1.5 w-40 overflow-hidden rounded-full'>
           <div
