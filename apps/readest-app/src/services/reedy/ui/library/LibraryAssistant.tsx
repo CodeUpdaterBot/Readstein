@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { RotateCw, X } from 'lucide-react';
 import type { AppService } from '@/types/system';
 import type { Book } from '@/types/book';
 import type { AISettings } from '@/services/ai/types';
@@ -63,6 +63,16 @@ export function LibraryAssistant({
   const [ready, setReady] = useState<{ db: ReedyDbLike; retriever: BookRetriever } | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const { status, build, cancel } = useLibraryCorpus({ appService, books, aiSettings });
+
+  // The index panel is the only place the build can be started or stopped, so
+  // it must stay reachable once a corpus exists — a partial corpus is a normal
+  // state ("3 of 261 works") and the user needs a way back to it. Reaching
+  // 'ready' hands the surface back to the conversation; a failure keeps the
+  // panel so its "Try again" is reachable.
+  const [showIndex, setShowIndex] = useState(false);
+  useEffect(() => {
+    if (status.phase === 'ready') setShowIndex(false);
+  }, [status.phase]);
 
   useEffect(() => {
     if (!appService) return;
@@ -140,23 +150,45 @@ export function LibraryAssistant({
   return (
     <div className='border-base-content/10 bg-base-100 flex h-full w-full flex-col border-s'>
       <div className='border-base-content/10 flex shrink-0 items-center justify-between border-b px-3 py-2'>
-        <div className='flex flex-col'>
+        <div className='flex min-w-0 flex-col'>
           <span className='text-base-content text-sm font-medium'>Your library</span>
-          <span className='text-base-content/50 text-[11px]'>
+          <span className='text-base-content/50 truncate text-[11px]'>
             {status.phase === 'ready'
-              ? `${status.works} work${status.works === 1 ? '' : 's'} searchable`
+              ? status.expected > status.works
+                ? `${status.works} of ${status.expected} works indexed`
+                : `${status.works} work${status.works === 1 ? '' : 's'} searchable`
               : 'Ask across every book you hold'}
           </span>
         </div>
-        <button
-          type='button'
-          onClick={onClose}
-          aria-label='Close library chat'
-          title='Close'
-          className='text-base-content/50 hover:text-base-content touch-target flex size-7 items-center justify-center rounded-full'
-        >
-          <X className='size-4' />
-        </button>
+        <div className='flex shrink-0 items-center gap-0.5'>
+          {status.phase === 'ready' ? (
+            <button
+              type='button'
+              onClick={() => {
+                setShowIndex(true);
+                void build();
+              }}
+              aria-label='Update library index'
+              title={
+                status.expected > status.works
+                  ? `Index the remaining ${status.expected - status.works} works`
+                  : 'Update index'
+              }
+              className='text-base-content/50 hover:text-base-content touch-target flex size-7 items-center justify-center rounded-full'
+            >
+              <RotateCw className='size-4' />
+            </button>
+          ) : null}
+          <button
+            type='button'
+            onClick={onClose}
+            aria-label='Close library chat'
+            title='Close'
+            className='text-base-content/50 hover:text-base-content touch-target flex size-7 items-center justify-center rounded-full'
+          >
+            <X className='size-4' />
+          </button>
+        </div>
       </div>
 
       {!aiSettings?.enabled ? (
@@ -165,7 +197,7 @@ export function LibraryAssistant({
         <CenteredNote>{openError}</CenteredNote>
       ) : !ready ? (
         <CenteredNote>Loading…</CenteredNote>
-      ) : status.phase !== 'ready' ? (
+      ) : status.phase !== 'ready' || showIndex ? (
         <LibraryIndexPanel
           status={status}
           workCount={books.length}

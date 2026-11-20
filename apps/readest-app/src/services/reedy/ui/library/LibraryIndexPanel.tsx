@@ -107,6 +107,7 @@ export function LibraryIndexPanel({
   }
 
   if (status.phase === 'ready') {
+    const remaining = Math.max(0, status.expected - status.works);
     return (
       <Centered>
         <div className='bg-primary/10 rounded-full p-3'>
@@ -115,14 +116,17 @@ export function LibraryIndexPanel({
         <div className='text-center'>
           <h3 className='text-base-content mb-0.5 text-sm font-medium'>
             {status.works} work{status.works === 1 ? '' : 's'} indexed
+            {remaining > 0 ? ` of ${status.expected}` : ''}
           </h3>
           <p className='text-base-content/60 max-w-[18rem] text-xs'>
-            Your whole library is searchable as one corpus.
+            {remaining > 0
+              ? `${remaining} still to index. It runs in the background and picks up where it stopped.`
+              : 'Your whole library is searchable as one corpus.'}
           </p>
         </div>
         <button className='btn btn-ghost btn-xs text-xs' onClick={onBuild}>
           <RotateCw className='me-1.5 size-3.5' />
-          Update index
+          {remaining > 0 ? 'Continue indexing' : 'Update index'}
         </button>
       </Centered>
     );

@@ -25,7 +25,7 @@ export const MessageCard = memo(function MessageCard({
 }) {
   if (message.role === 'user') {
     return (
-      <div className='animate-in fade-in mx-auto mb-3 flex w-full justify-end duration-200'>
+      <div className='animate-in fade-in mx-auto mb-3 flex w-full justify-end px-3 duration-200'>
         <div className='bg-base-200/60 text-base-content max-w-[85%] rounded-lg px-3 py-2 text-sm'>
           <UserTextPart text={message.text} />
         </div>
@@ -34,7 +34,7 @@ export const MessageCard = memo(function MessageCard({
   }
 
   return (
-    <div className='animate-in fade-in mb-4 flex w-full duration-200'>
+    <div className='animate-in fade-in mb-4 flex w-full px-3 duration-200'>
       <div className='flex w-full min-w-0 flex-col gap-1'>
         {message.parts.map((part, i) => (
           <PartDispatcher key={partKey(part, i)} part={part} onSourceClick={onSourceClick} />

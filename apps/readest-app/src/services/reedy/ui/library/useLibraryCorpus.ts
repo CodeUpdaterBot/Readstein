@@ -14,6 +14,7 @@ import {
   type LibraryIndexReport,
 } from '../../retrieval/LibraryIndexer';
 import { createReedyModels } from '../../models/registry';
+import { resolveLibraryCorpus } from '../../retrieval/libraryDedup';
 
 /**
  * Lifecycle of the library-wide corpus, as the UI needs to see it.
@@ -23,7 +24,12 @@ export type LibraryCorpusStatus =
   /** No corpus built yet — the surface should offer to build one. */
   | { phase: 'empty' }
   | { phase: 'indexing'; progress: LibraryIndexProgress }
-  | { phase: 'ready'; works: number; lastIndexedAt: number | null }
+  /**
+   * A corpus exists. `works` is what is indexed so far and `expected` how many
+   * English works the shelf holds, so the UI can say "3 of 261" and offer to
+   * continue — a partial corpus is a normal state, not a finished one.
+   */
+  | { phase: 'ready'; works: number; expected: number; lastIndexedAt: number | null }
   | { phase: 'error'; message: string };
 
 const IDLE_PROGRESS: LibraryIndexProgress = {
@@ -65,6 +71,10 @@ export function useLibraryCorpus({
       const { db } = await openReedy(appService);
       const metas = await db.listBookMeta();
       const indexed = metas.filter((m) => m.indexingStatus === 'indexed' && m.chunkCount > 0);
+      // Resolved the same way the sweep resolves it (English-only, one entry
+      // per work), so the tally the user sees matches what a full run would
+      // produce rather than the raw file count.
+      const expected = resolveLibraryCorpus(LibraryIndexer.toCandidates(books)).kept.length;
       if (indexed.length === 0) {
         setStatus({ phase: 'empty' });
         return;
@@ -72,12 +82,13 @@ export function useLibraryCorpus({
       setStatus({
         phase: 'ready',
         works: indexed.length,
+        expected,
         lastIndexedAt: Math.max(0, ...indexed.map((m) => m.indexedAt ?? 0)) || null,
       });
     } catch (err) {
       setStatus({ phase: 'error', message: err instanceof Error ? err.message : String(err) });
     }
-  }, [appService]);
+  }, [appService, books]);
 
   useEffect(() => {
     void refresh();
