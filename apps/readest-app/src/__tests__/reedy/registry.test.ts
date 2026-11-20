@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createReedyModels } from '@/services/reedy/models/registry';
+import {
+  EMBEDDING_BATCH_SIZE,
+  planEmbeddingRequests,
+} from '@/services/reedy/models/embeddingBatching';
 import { DEFAULT_AI_SETTINGS } from '@/services/ai/constants';
 import type { AISettings } from '@/services/ai/types';
 
@@ -84,9 +88,13 @@ describe('createReedyModels — embedding routing', () => {
     expect(embedding.batchSize).toBe(4);
   });
 
-  it('uses larger batchSize for hosted providers', () => {
+  it('uses the planned large batch for hosted providers', () => {
     const { embedding } = createReedyModels(settings({ provider: 'ai-gateway' }));
-    expect(embedding.batchSize).toBe(16);
+    expect(embedding.batchSize).toBe(EMBEDDING_BATCH_SIZE);
+    // A whole indexer slice at real chunk size must still plan into ONE
+    // provider-legal request — that is the property the batch size is chosen for.
+    const slice = new Array(EMBEDDING_BATCH_SIZE).fill('w'.repeat(550));
+    expect(planEmbeddingRequests(slice)).toHaveLength(1);
   });
 
   it('falls back to text-embedding-3-small when openrouter embedding is empty', () => {

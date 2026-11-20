@@ -303,6 +303,29 @@ export class ReedyDb {
   }
 
   /**
+   * Drop every indexed book whose hash is NOT in `liveHashes`, and return how
+   * many were removed.
+   *
+   * A book leaves the corpus without anyone asking: deleting it from the
+   * library, or replacing its file (the hash is content-addressed, so an edited
+   * translation is a *new* hash and the old one is orphaned). A library-scope
+   * search reads every chunk in the table, so an orphan would still be retrieved
+   * and cited for a work the user no longer has — a citation that cannot be
+   * opened. Pruning on each build keeps the corpus equal to the library.
+   *
+   * Refuses to act on an empty list: an unloaded or partial shelf must never be
+   * mistaken for "the user deleted everything".
+   */
+  async pruneBooksNotIn(liveHashes: string[]): Promise<number> {
+    if (liveHashes.length === 0) return 0;
+    const keep = new Set(liveHashes);
+    const metas = await this.listBookMeta();
+    const stale = metas.map((m) => m.bookHash).filter((hash) => !keep.has(hash));
+    for (const hash of stale) await this.dropBookData(hash);
+    return stale.length;
+  }
+
+  /**
    * Wipe every Reedy-managed row across the database. Used when the user
    * switches embedding models — the lazy embeddings table keeps its
    * existing vector32(<old-dim>) shape until something writes to it again,

@@ -1,6 +1,12 @@
-import { embed, embedMany } from 'ai';
+import { embedMany } from 'ai';
 import { getAIProvider } from '@/services/ai/providers';
 import type { AISettings } from '@/services/ai/types';
+import { AI_RETRY_CONFIGS, AI_TIMEOUTS, withRetryAndTimeout } from '@/services/ai/utils/retry';
+import {
+  EMBEDDING_BATCH_SIZE,
+  LOCAL_EMBEDDING_BATCH_SIZE,
+  planEmbeddingRequests,
+} from './embeddingBatching';
 import type { ChatModel } from './ChatModel';
 import type { EmbeddingModel } from './EmbeddingModel';
 
@@ -132,7 +138,11 @@ function adaptEmbeddingModel(
   id: string,
   settings: AISettings,
 ): EmbeddingModel {
-  const batchSize = settings.provider === 'ollama' ? 4 : 16;
+  // Local engines want small batches; hosted providers take the planned slice.
+  // Either way `planEmbeddingRequests` re-splits every call so no single HTTP
+  // request can exceed the provider's input or aggregate-token limits.
+  const batchSize =
+    settings.provider === 'ollama' ? LOCAL_EMBEDDING_BATCH_SIZE : EMBEDDING_BATCH_SIZE;
   let dim: number | null = null;
   return {
     id,
@@ -145,22 +155,30 @@ function adaptEmbeddingModel(
     batchSize,
     async embed(texts, opts) {
       if (texts.length === 0) return [];
-      if (texts.length === 1) {
-        const { embedding } = await embed({
-          model: vercelModel,
-          value: texts[0]!,
-          abortSignal: opts?.signal,
-        });
-        dim ??= embedding.length;
-        return [embedding];
+      const vectors: number[][] = [];
+      for (const group of planEmbeddingRequests(texts)) {
+        // Retry + timeout per REQUEST, so a transient 429/5xx on a long
+        // unattended sweep costs one batch rather than the whole book — and a
+        // hung request cannot stall the run. Aborts pass straight through.
+        const batch = await withRetryAndTimeout(
+          () =>
+            embedMany({
+              model: vercelModel,
+              values: group,
+              abortSignal: opts?.signal,
+            }),
+          AI_TIMEOUTS.EMBEDDING_BATCH,
+          AI_RETRY_CONFIGS.EMBEDDING,
+        );
+        if (batch.embeddings.length !== group.length) {
+          throw new Error(
+            `embedding model returned ${batch.embeddings.length} vectors for ${group.length} inputs`,
+          );
+        }
+        if (dim == null && batch.embeddings.length > 0) dim = batch.embeddings[0]!.length;
+        vectors.push(...batch.embeddings);
       }
-      const { embeddings } = await embedMany({
-        model: vercelModel,
-        values: texts,
-        abortSignal: opts?.signal,
-      });
-      if (embeddings.length > 0) dim ??= embeddings[0]!.length;
-      return embeddings;
+      return vectors;
     },
   };
 }

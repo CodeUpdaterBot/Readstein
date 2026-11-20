@@ -216,4 +216,35 @@ describe('LibraryIndexer', () => {
     expect(report.indexed).toBe(1);
     expect(report.failed).toBe(0);
   });
+
+  it('prunes an indexed book that has left the library', async () => {
+    const doc = bookDoc([section('s1', '<p>alpha bravo charlie delta echo foxtrot golf</p>')]);
+    const both = [
+      record({ hash: 'keep', title: 'Kept Work', author: 'A' }),
+      record({ hash: 'gone', title: 'Removed Work', author: 'B' }),
+    ];
+    const first = await indexer.run(both, fakeModel(), async () => doc);
+    expect(first.indexed).toBe(2);
+    expect(first.pruned).toBe(0);
+
+    // The second run sees only one of them — the other was deleted.
+    const second = await indexer.run([both[0]!], fakeModel(), async () => doc);
+    expect(second.pruned).toBe(1);
+    expect(await reedy.getBookMeta('gone')).toBeNull();
+    expect((await reedy.getBookMeta('keep'))?.indexingStatus).toBe('indexed');
+  });
+
+  it('never prunes on an empty book list', async () => {
+    const doc = bookDoc([section('s1', '<p>alpha bravo charlie delta echo foxtrot golf</p>')]);
+    await indexer.run(
+      [record({ hash: 'keep', title: 'Kept Work', author: 'A' })],
+      fakeModel(),
+      async () => doc,
+    );
+
+    // An unloaded/partial shelf must not read as "everything was deleted".
+    const report = await indexer.run([], fakeModel(), async () => doc);
+    expect(report.pruned).toBe(0);
+    expect((await reedy.getBookMeta('keep'))?.indexingStatus).toBe('indexed');
+  });
 });

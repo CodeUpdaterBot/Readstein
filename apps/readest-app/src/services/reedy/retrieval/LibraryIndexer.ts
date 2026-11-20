@@ -42,6 +42,8 @@ export interface LibraryIndexReport {
   failed: number;
   /** Records excluded because the work has no English representation at all. */
   notEnglish: number;
+  /** Indexed works removed because they are no longer in the library. */
+  pruned: number;
   /** Per-record outcome, so a UI can show what was merged or dropped. */
   decisions: CorpusDecision[];
   aborted: boolean;
@@ -105,9 +107,16 @@ export class LibraryIndexer {
       empty: 0,
       failed: 0,
       notEnglish: decisions.filter((d) => d.reason === 'not-english').length,
+      pruned: 0,
       decisions,
       aborted: false,
     };
+
+    // Keep the corpus equal to the library before indexing into it: a work
+    // deleted — or replaced, which changes its content-addressed hash — since
+    // the last run must not stay retrievable and citable. The prune ignores an
+    // empty list, so a partial shelf can never read as "everything was deleted".
+    report.pruned = await this.reedy.pruneBooksNotIn(books.map((b) => b.hash));
 
     const tally = (): Pick<LibraryIndexProgress, 'indexed' | 'skipped' | 'empty' | 'failed'> => ({
       indexed: report.indexed,
