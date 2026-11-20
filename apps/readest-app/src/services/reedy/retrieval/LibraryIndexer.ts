@@ -14,7 +14,13 @@ import { resolveEmbeddingDim } from './BookIndexer';
 export type BookDocLoader = (book: Book) => Promise<BookDoc>;
 
 export interface LibraryIndexProgress {
-  phase: 'resolving' | 'indexing' | 'done';
+  /**
+   * 'finalizing' is the one bulk step after the last book: rebuilding the chunk
+   * FTS index that the sweep dropped (see ReedyDb.dropChunkFtsIndex). It is a
+   * single pass over the whole corpus, so it is reported rather than left
+   * looking like a hang.
+   */
+  phase: 'resolving' | 'indexing' | 'finalizing' | 'done';
   /** 1-based position of the book currently being indexed. */
   bookIndex: number;
   totalBooks: number;
@@ -281,7 +287,17 @@ export class LibraryIndexer {
     }
 
     // One bulk index build over everything just written — the point of having
-    // dropped it up front.
+    // dropped it up front. Announced first: it is a single pass over the whole
+    // corpus, so it must not look like a hang at 100%.
+    options.onProgress?.({
+      phase: 'finalizing',
+      bookIndex: kept.length,
+      totalBooks: kept.length,
+      bookTitle: '',
+      lastError,
+      notice,
+      ...tally(),
+    });
     await this.reedy.rebuildChunkFtsIndex();
 
     options.onProgress?.({

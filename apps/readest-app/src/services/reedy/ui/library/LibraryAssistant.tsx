@@ -164,15 +164,14 @@ export function LibraryAssistant({
           {status.phase === 'ready' ? (
             <button
               type='button'
-              onClick={() => {
-                setShowIndex(true);
-                void build();
-              }}
-              aria-label='Update library index'
+              onClick={() => setShowIndex((open) => !open)}
+              aria-label='Library index status'
               title={
-                status.expected > status.works
-                  ? `Index the remaining ${status.expected - status.works} works`
-                  : 'Update index'
+                showIndex
+                  ? 'Back to chat'
+                  : status.expected > status.works
+                    ? `Index status — ${status.expected - status.works} works left to index`
+                    : 'Index status'
               }
               className='text-base-content/50 hover:text-base-content touch-target flex size-7 items-center justify-center rounded-full'
             >

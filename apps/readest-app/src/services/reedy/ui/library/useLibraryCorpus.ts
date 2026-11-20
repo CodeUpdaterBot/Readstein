@@ -29,7 +29,13 @@ export type LibraryCorpusStatus =
    * English works the shelf holds, so the UI can say "3 of 261" and offer to
    * continue — a partial corpus is a normal state, not a finished one.
    */
-  | { phase: 'ready'; works: number; expected: number; lastIndexedAt: number | null }
+  | {
+      phase: 'ready';
+      works: number;
+      expected: number;
+      noText: string[];
+      lastIndexedAt: number | null;
+    }
   | { phase: 'error'; message: string };
 
 const IDLE_PROGRESS: LibraryIndexProgress = {
@@ -63,10 +69,16 @@ export function useLibraryCorpus({
 }) {
   const [status, setStatus] = useState<LibraryCorpusStatus>({ phase: 'loading' });
   const controllerRef = useRef<AbortController | null>(null);
+  /** True from the moment a sweep starts until its final refresh. */
+  const runningRef = useRef(false);
   const models = useMemo(() => (aiSettings ? createReedyModels(aiSettings) : null), [aiSettings]);
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!appService) return;
+    // Never let a background refresh clobber a sweep that is in flight: `books`
+    // changing mid-run used to flip the status back to 'ready', which hid the
+    // progress panel and flashed the chat for a moment.
+    if (runningRef.current) return;
     try {
       const { db } = await openReedy(appService);
       const metas = await db.listBookMeta();
@@ -83,6 +95,12 @@ export function useLibraryCorpus({
         phase: 'ready',
         works: indexed.length,
         expected,
+        // Named for the user: a work with no extractable text cannot be fixed
+        // by re-running, it needs OCR — so say which ones they are.
+        noText: metas
+          .filter((m) => m.indexingStatus === 'empty_index')
+          .map((m) => m.bookTitle ?? 'Untitled work')
+          .slice(0, 100),
         lastIndexedAt: Math.max(0, ...indexed.map((m) => m.indexedAt ?? 0)) || null,
       });
     } catch (err) {
@@ -103,6 +121,7 @@ export function useLibraryCorpus({
     if (!appService || !models) return null;
     // Never run two sweeps at once — they would both write the same tables.
     controllerRef.current?.abort();
+    runningRef.current = true;
     const controller = new AbortController();
     controllerRef.current = controller;
     setStatus({ phase: 'indexing', progress: IDLE_PROGRESS });
@@ -154,10 +173,13 @@ export function useLibraryCorpus({
         onBookDone: (book) => release(book.hash),
       });
       for (const hash of [...opened.keys()]) release(hash);
+      // The sweep is over: allow the refresh that publishes its result.
+      runningRef.current = false;
       await refresh();
       return report;
     } catch (err) {
       for (const hash of [...opened.keys()]) release(hash);
+      runningRef.current = false;
       setStatus({ phase: 'error', message: err instanceof Error ? err.message : String(err) });
       return null;
     } finally {

@@ -224,9 +224,15 @@ export class BookIndexer {
    * DOM route runs pdf.js's TextLayer (font metrics + a rAF-driven render) once
    * per page.
    *
-   * Markup is deliberately refused: the DOM path is where class-based
-   * exclusions actually get applied, so the English-only corpus (which must
-   * drop a `source-text` column) has to go through it.
+   * An EMPTY result is authoritative and returned as-is, not treated as "no
+   * cheap path here": for a PDF, `loadPlainText` reads exactly the text
+   * `createDocument` would have extracted, so an empty page means the page has
+   * no text (an image-only scan). Falling back to the DOM in that case would
+   * rebuild every page's TextLayer to discover the same nothing.
+   *
+   * Markup is still refused: the DOM path is where class-based exclusions
+   * actually get applied, so the English-only corpus (which must drop a
+   * `source-text` column) has to go through it.
    *
    * Note the name: `loadText` is taken, and means the section's *markup* to the
    * nav/TOC pipeline. This must never be reachable through that name.
@@ -237,7 +243,7 @@ export class BookIndexer {
     if (typeof loadPlainText !== 'function') return null;
     try {
       const text = await loadPlainText.call(section);
-      if (typeof text !== 'string' || text.trim().length === 0) return null;
+      if (typeof text !== 'string') return null;
       if (text.includes('<')) return null;
       return text;
     } catch {

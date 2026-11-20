@@ -32,6 +32,30 @@ export function LibraryIndexPanel({
   if (status.phase === 'indexing') {
     const { progress } = status;
     const chunk = progress.chunkProgress;
+    // The last step is a single pass over the whole corpus (rebuilding the chunk
+    // search index the sweep dropped). It has no per-item progress to report, so
+    // say what it is instead of leaving the bar frozen on the last book.
+    if (progress.phase === 'finalizing') {
+      return (
+        <Centered>
+          <Loader2Icon className='text-primary size-6 animate-spin' />
+          <div className='text-center'>
+            <p className='text-base-content mb-1 text-sm font-medium'>Building the search index…</p>
+            <p className='text-base-content/60 max-w-[19rem] text-xs'>
+              One pass over everything just indexed — the last step.
+            </p>
+          </div>
+          <div className='bg-base-200 h-1.5 w-40 overflow-hidden rounded-full'>
+            <div className='bg-primary h-full w-2/3 animate-pulse' />
+          </div>
+          <div className='text-base-content/50 flex gap-3 text-[11px]'>
+            <span>{progress.indexed} indexed</span>
+            <span>{progress.skipped} up to date</span>
+            {progress.empty > 0 && <span>{progress.empty} no text</span>}
+          </div>
+        </Centered>
+      );
+    }
     // The bar tracks the book in flight (reading pages, then embedding them) so
     // a large PDF visibly moves; the works counter above gives overall position.
     const bookPct = chunk && chunk.total > 0 ? Math.round((chunk.current / chunk.total) * 100) : 0;
@@ -128,6 +152,27 @@ export function LibraryIndexPanel({
           <RotateCw className='me-1.5 size-3.5' />
           {remaining > 0 ? 'Continue indexing' : 'Update index'}
         </button>
+        {/* Named, because re-running cannot fix a work with no extractable text
+            — it needs OCR first. */}
+        {status.noText.length > 0 ? (
+          <div className='w-full max-w-[20rem] text-start'>
+            <p className='text-base-content/50 mb-0.5 text-[10px] uppercase'>
+              {status.noText.length} work{status.noText.length === 1 ? '' : 's'} with no readable
+              text
+            </p>
+            <p className='text-base-content/60 text-[11px]'>
+              These are image-only scans — nothing for the index to read. OCR them, then run this
+              again.
+            </p>
+            <ul className='text-base-content/50 mt-1 max-h-28 space-y-0.5 overflow-auto text-[11px]'>
+              {status.noText.map((title) => (
+                <li key={title} className='truncate' title={title}>
+                  • {title}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </Centered>
     );
   }
