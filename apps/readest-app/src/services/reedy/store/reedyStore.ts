@@ -75,6 +75,8 @@ export interface ReedyStoreState {
   applyEvent: (event: ReedyEvent) => void;
   finishTurn: () => void;
   reset: () => void;
+  /** Replace the whole thread — used when loading a stored conversation. */
+  setMessages: (messages: ReedyMessage[]) => void;
 }
 
 export const useReedyStore = create<ReedyStoreState>((set, get) => ({
@@ -117,6 +119,9 @@ export const useReedyStore = create<ReedyStoreState>((set, get) => ({
     set({ isRunning: false, activeAssistantMessageId: null, abortController: null });
   },
 
+  setMessages(messages) {
+    set({ messages, isRunning: false, activeAssistantMessageId: null, abortController: null });
+  },
   reset() {
     set({
       messages: [],

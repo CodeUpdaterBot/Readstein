@@ -28,6 +28,18 @@ import type {
 /** Rows per chunk-insert transaction — see {@link ReedyDb.insertChunks}. */
 const INSERT_BATCH_SIZE = 200;
 
+/** Messages per conversation-write transaction. */
+const CONVERSATION_BATCH_SIZE = 100;
+
+/** A stored conversation, as the history list needs it. */
+export interface ConversationSummary {
+  id: string;
+  title: string | null;
+  updatedAt: number;
+  /** The DB layer hands back rows with an index signature. */
+  [key: string]: unknown;
+}
+
 /**
  * Words too common to route on. A query word that appears in half the shelf
  * tells us nothing about which books to search, and matching it diluted the
@@ -727,6 +739,90 @@ export class ReedyDb {
     // LIKE scan on every query would cost more than it contributes. Routing
     // picks the candidate books; the vector half ranks the chunks inside them.
     return reciprocalRankFusion(vectorRows, [], k);
+  }
+
+  // ---------------------------------------------------------------------------
+  // library conversations
+  // ---------------------------------------------------------------------------
+
+  async createConversation(id: string, title: string | null): Promise<void> {
+    const now = Date.now();
+    await this.enqueue(() =>
+      this.db.execute(
+        `INSERT INTO reedy_conversations (id, title, created_at, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT (id) DO NOTHING`,
+        [id, title, now, now],
+      ),
+    );
+  }
+
+  async listConversations(limit = 100): Promise<ConversationSummary[]> {
+    try {
+      return await this.db.select<ConversationSummary>(
+        `SELECT id, title, updated_at AS updatedAt
+           FROM reedy_conversations
+          ORDER BY updated_at DESC
+          LIMIT ?`,
+        [limit],
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  async renameConversation(id: string, title: string): Promise<void> {
+    await this.enqueue(() =>
+      this.db.execute('UPDATE reedy_conversations SET title = ? WHERE id = ?', [title, id]),
+    );
+  }
+
+  async deleteConversation(id: string): Promise<void> {
+    await this.enqueue(async () => {
+      await this.db.execute('DELETE FROM reedy_conversation_messages WHERE conversation_id = ?', [
+        id,
+      ]);
+      await this.db.execute('DELETE FROM reedy_conversations WHERE id = ?', [id]);
+    });
+  }
+
+  /**
+   * Replace a conversation's messages wholesale. Threads are tens of messages,
+   * not thousands, so replacing is simpler and safer than diffing — and it is
+   * written in bounded batches for the same reason chunk inserts are.
+   */
+  async saveConversationMessages(id: string, messages: unknown[]): Promise<void> {
+    await this.enqueue(async () => {
+      await this.db.execute('DELETE FROM reedy_conversation_messages WHERE conversation_id = ?', [
+        id,
+      ]);
+      const stmts = messages.map(
+        (m, i) =>
+          `INSERT INTO reedy_conversation_messages (conversation_id, ordinal, role, payload)
+           VALUES (${sqlQuote(id)}, ${i}, ${sqlQuote((m as { role?: string }).role ?? 'assistant')}, ${sqlQuote(JSON.stringify(m))})`,
+      );
+      for (let i = 0; i < stmts.length; i += CONVERSATION_BATCH_SIZE) {
+        await this.db.batch(stmts.slice(i, i + CONVERSATION_BATCH_SIZE));
+      }
+      await this.db.execute('UPDATE reedy_conversations SET updated_at = ? WHERE id = ?', [
+        Date.now(),
+        id,
+      ]);
+    });
+  }
+
+  async loadConversationMessages(id: string): Promise<unknown[]> {
+    try {
+      const rows = await this.db.select<{ payload: string }>(
+        `SELECT payload FROM reedy_conversation_messages
+          WHERE conversation_id = ?
+          ORDER BY ordinal ASC`,
+        [id],
+      );
+      return rows.map((r) => JSON.parse(r.payload) as unknown);
+    } catch {
+      return [];
+    }
   }
 
   /**

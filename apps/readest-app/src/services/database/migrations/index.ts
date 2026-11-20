@@ -313,6 +313,30 @@ const migrations: Record<SchemaType, MigrationEntry[]> = {
         ALTER TABLE reedy_book_meta ADD COLUMN library_group TEXT;
       `,
     },
+    {
+      // Library conversations are worth keeping — the pane used to hold one
+      // thread and drop it when it closed. A message is stored as the store's
+      // own rendered JSON, so a restored thread is exactly what it was,
+      // citations and tool calls included.
+      name: '2026112101_reedy_conversations',
+      sql: `
+        CREATE TABLE IF NOT EXISTS reedy_conversations (
+          id TEXT PRIMARY KEY,
+          title TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS reedy_conversation_messages (
+          conversation_id TEXT NOT NULL REFERENCES reedy_conversations (id) ON DELETE CASCADE,
+          ordinal INTEGER NOT NULL,
+          role TEXT NOT NULL,
+          payload TEXT NOT NULL,
+          PRIMARY KEY (conversation_id, ordinal)
+        );
+        CREATE INDEX IF NOT EXISTS idx_conversation_messages
+          ON reedy_conversation_messages (conversation_id, ordinal);
+      `,
+    },
   ],
 };
 

@@ -387,6 +387,34 @@ describe('ReedyDb', () => {
     });
   });
 
+  describe('library conversations', () => {
+    it('round-trips a thread, renames it, and forgets it on delete', async () => {
+      const messages = [
+        { role: 'user', text: 'what really happened in 1963' },
+        { role: 'assistant', parts: [{ type: 'text', text: 'According to the library…' }] },
+      ];
+      await reedy.createConversation('c1', null);
+      await reedy.saveConversationMessages('c1', messages);
+
+      const list = await reedy.listConversations();
+      expect(list.map((c) => c.id)).toEqual(['c1']);
+      expect(list[0]!.title).toBeNull();
+      // Stored as the store's own shape, so a restored thread renders as it was.
+      expect(await reedy.loadConversationMessages('c1')).toEqual(messages);
+
+      await reedy.renameConversation('c1', '1963');
+      expect((await reedy.listConversations())[0]!.title).toBe('1963');
+
+      // Saving again replaces rather than appends.
+      await reedy.saveConversationMessages('c1', [messages[0]!]);
+      expect(await reedy.loadConversationMessages('c1')).toHaveLength(1);
+
+      await reedy.deleteConversation('c1');
+      expect(await reedy.listConversations()).toEqual([]);
+      expect(await reedy.loadConversationMessages('c1')).toEqual([]);
+    });
+  });
+
   describe('book centroids', () => {
     it('backfills from stored vectors and routes by cosine', async () => {
       await reedy.ensureEmbeddingsTable(4);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Maximize2, Minimize2, RotateCw, X } from 'lucide-react';
+import { History, Maximize2, Minimize2, RotateCw, X } from 'lucide-react';
 import type { AppService } from '@/types/system';
 import type { Book } from '@/types/book';
 import type { AISettings } from '@/services/ai/types';
@@ -19,7 +19,9 @@ import {
   createToolCatalogLayer,
   type LibraryManifest,
 } from '../../context';
-import { useReedyStore } from '../../store/reedyStore';
+import { useReedyStore, type ReedyMessage } from '../../store/reedyStore';
+import { ConversationList } from './ConversationList';
+import type { ConversationSummary } from '../../db/ReedyDb';
 import { useReedyTurn } from '../useReedyTurn';
 import { AgentThread } from '../AgentThread';
 import { Composer } from '../Composer';
@@ -125,13 +127,120 @@ export function LibraryAssistant({
 
   const messages = useReedyStore((s) => s.messages);
   const isRunning = useReedyStore((s) => s.isRunning);
-  const resetStore = useReedyStore((s) => s.reset);
+  const setMessages = useReedyStore((s) => s.setMessages);
   const { send, abort } = useReedyTurn(runtime);
 
-  // One conversation, reset when the surface is (re)opened.
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  // Read inside the save effect without making it a dependency (which would
+  // re-run the save on every list refresh).
+  const conversationsRef = useRef<ConversationSummary[]>([]);
+
+  const refreshConversations = useCallback(async () => {
+    if (!ready) return;
+    const list = await ready.db.listConversations();
+    conversationsRef.current = list;
+    setConversations(list);
+  }, [ready]);
+
+  // Resume the most recent conversation when the pane opens, or start one.
+  // Closing the pane used to throw the thread away.
   useEffect(() => {
-    resetStore();
-  }, [resetStore]);
+    if (!ready) return;
+    let alive = true;
+    void (async () => {
+      const list = await ready.db.listConversations();
+      if (!alive) return;
+      conversationsRef.current = list;
+      setConversations(list);
+      const latest = list[0];
+      if (latest) {
+        setConversationId(latest.id);
+        const stored = (await ready.db.loadConversationMessages(latest.id)) as ReedyMessage[];
+        if (alive) setMessages(stored);
+      } else {
+        const id = newConversationId();
+        await ready.db.createConversation(id, null);
+        if (!alive) return;
+        setConversationId(id);
+        setMessages([]);
+        await refreshConversations();
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [ready, setMessages, refreshConversations]);
+
+  // Persist as the thread grows, debounced so a streaming answer is not written
+  // once per token. The title comes from the first thing the user asked, and is
+  // only set while the conversation has none — a rename stays a rename.
+  useEffect(() => {
+    if (!ready || !conversationId || messages.length === 0) return;
+    const timer = window.setTimeout(() => {
+      void ready.db
+        .saveConversationMessages(conversationId, messages)
+        .then(async () => {
+          const current = conversationsRef.current.find((c) => c.id === conversationId);
+          const title = titleOf(messages.find((m) => m.role === 'user'));
+          if (title && !current?.title) {
+            await ready.db.renameConversation(conversationId, title);
+          }
+          await refreshConversations();
+        })
+        .catch(() => undefined);
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [ready, conversationId, messages, refreshConversations]);
+
+  const openConversation = useCallback(
+    async (id: string) => {
+      if (!ready) return;
+      setConversationId(id);
+      setMessages((await ready.db.loadConversationMessages(id)) as ReedyMessage[]);
+      setShowHistory(false);
+    },
+    [ready, setMessages],
+  );
+
+  const newConversation = useCallback(async () => {
+    if (!ready) return;
+    const id = newConversationId();
+    await ready.db.createConversation(id, null);
+    setConversationId(id);
+    setMessages([]);
+    setShowHistory(false);
+    await refreshConversations();
+  }, [ready, setMessages, refreshConversations]);
+
+  const renameConversation = useCallback(
+    async (id: string, title: string) => {
+      if (!ready) return;
+      await ready.db.renameConversation(id, title);
+      await refreshConversations();
+    },
+    [ready, refreshConversations],
+  );
+
+  const deleteConversation = useCallback(
+    async (id: string) => {
+      if (!ready) return;
+      await ready.db.deleteConversation(id);
+      const list = await ready.db.listConversations();
+      conversationsRef.current = list;
+      setConversations(list);
+      if (id !== conversationId) return;
+      const next = list[0];
+      if (next) {
+        setConversationId(next.id);
+        setMessages((await ready.db.loadConversationMessages(next.id)) as ReedyMessage[]);
+      } else {
+        await newConversation();
+      }
+    },
+    [ready, conversationId, setMessages, newConversation],
+  );
 
   const handleSend = useCallback(
     (text: string) => {
@@ -153,7 +262,7 @@ export function LibraryAssistant({
   );
 
   return (
-    <div className='border-base-content/10 bg-base-100 flex h-full w-full flex-col border-s'>
+    <div className='border-base-content/10 bg-base-100 relative flex h-full w-full flex-col border-s'>
       <div className='border-base-content/10 flex shrink-0 items-center justify-between border-b px-3 py-2'>
         <div className='flex min-w-0 flex-col'>
           <span className='text-base-content text-sm font-medium'>Your library</span>
@@ -166,6 +275,15 @@ export function LibraryAssistant({
           </span>
         </div>
         <div className='flex shrink-0 items-center gap-0.5'>
+          <button
+            type='button'
+            onClick={() => setShowHistory((v) => !v)}
+            aria-label='Conversations'
+            title='Conversations'
+            className='text-base-content/50 hover:text-base-content touch-target flex size-7 items-center justify-center rounded-full'
+          >
+            <History className='size-4' />
+          </button>
           {onToggleExpand ? (
             <button
               type='button'
@@ -244,8 +362,42 @@ export function LibraryAssistant({
           />
         </>
       )}
+
+      {/* History slides in over the thread rather than resizing it, so switching
+          conversations never reflows the message you were reading. */}
+      {showHistory ? (
+        <div className='absolute inset-0 z-20 flex'>
+          <ConversationList
+            conversations={conversations}
+            currentId={conversationId}
+            onSelect={(id) => void openConversation(id)}
+            onNew={() => void newConversation()}
+            onRename={(id, title) => void renameConversation(id, title)}
+            onDelete={(id) => void deleteConversation(id)}
+          />
+          <button
+            type='button'
+            aria-label='Close conversations'
+            onClick={() => setShowHistory(false)}
+            className='flex-1 bg-black/20'
+          />
+        </div>
+      ) : null}
     </div>
   );
+}
+
+/** A fresh conversation id — nothing server-side mints one. */
+function newConversationId(): string {
+  return `lib-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** A conversation's name: the first thing the user asked. */
+function titleOf(message: ReedyMessage | undefined): string | null {
+  if (!message || message.role !== 'user') return null;
+  const text = (message as { text?: string }).text?.trim() ?? '';
+  if (!text) return null;
+  return text.length > 60 ? `${text.slice(0, 57)}…` : text;
 }
 
 /** The ReedyDb type is structural here; imported lazily to keep the import list flat. */
