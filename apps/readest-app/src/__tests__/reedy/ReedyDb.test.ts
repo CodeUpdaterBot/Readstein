@@ -384,4 +384,33 @@ describe('ReedyDb', () => {
       for (const r of res) expect(r.positionIndex).toBeLessThanOrEqual(1);
     });
   });
+
+  describe('insertChunks', () => {
+    it('writes in bounded transactions and reports progress', async () => {
+      const total = 450;
+      const chunks: ChunkRow[] = Array.from({ length: total }, (_, i) =>
+        chunk(`c-${i}`, 'bookA', i, `chunk number ${i}`),
+      );
+      const seen: Array<{ done: number; total: number }> = [];
+
+      await reedy.insertChunks(chunks, {
+        onProgress: (done, t) => seen.push({ done, total: t }),
+      });
+
+      // Bounded batches (200) — a whole book in one transaction held the write
+      // lock for minutes on a 441-page PDF.
+      expect(seen).toEqual([
+        { done: 200, total },
+        { done: 400, total },
+        { done: 450, total },
+      ]);
+      const rows = await svc.select<{ c: number }>(
+        "SELECT COUNT(*) AS c FROM reedy_book_chunks WHERE book_hash = 'bookA'",
+      );
+      expect(rows[0]!.c).toBe(total);
+      // The ngram FTS index makes these inserts slow (~16ms/row measured), so
+      // 450 rows is well past vitest's 5s default — that slowness is the
+      // reason the batches exist.
+    }, 60_000);
+  });
 });

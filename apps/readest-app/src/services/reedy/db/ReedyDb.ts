@@ -25,6 +25,9 @@ import type {
  * inline-quoted via {@link sqlQuote}; this is safe for SQLite which only
  * honours `''` as an escape sequence inside single-quoted strings.
  */
+/** Rows per chunk-insert transaction — see {@link ReedyDb.insertChunks}. */
+const INSERT_BATCH_SIZE = 200;
+
 export class ReedyDb {
   /**
    * Serializes every DB-mutating call that goes through `batch()` because the
@@ -241,15 +244,31 @@ export class ReedyDb {
   // bulk writes
   // ---------------------------------------------------------------------------
 
-  async insertChunks(chunks: ChunkRow[]): Promise<void> {
+  /**
+   * Rows per insert transaction.
+   *
+   * Writing a whole book's chunks in ONE batch does not scale: measured on this
+   * machine, 200 rows with the ngram FTS index take ~3.1s, but a single batch of
+   * 2,033 rows (a 441-page PDF) did not complete in six minutes and held the
+   * write lock — with a 38 MB WAL — the entire time. Cost is super-linear in
+   * batch size, so writes are bounded and reported.
+   */
+  async insertChunks(
+    chunks: ChunkRow[],
+    options?: { onProgress?: (done: number, total: number) => void },
+  ): Promise<void> {
     if (chunks.length === 0) return;
-    const stmts = chunks.map(
-      (c) =>
-        `INSERT INTO reedy_book_chunks
-           (id, book_hash, section_index, chapter_title, start_cfi, end_cfi, position_index, text, token_count)
-         VALUES (${sqlQuote(c.id)}, ${sqlQuote(c.bookHash)}, ${c.sectionIndex}, ${sqlQuoteNullable(c.chapterTitle)}, ${sqlQuote(c.startCfi)}, ${sqlQuote(c.endCfi)}, ${c.positionIndex}, ${sqlQuote(c.text)}, ${c.tokenCount})`,
-    );
-    await this.enqueue(() => this.db.batch(stmts));
+    for (let i = 0; i < chunks.length; i += INSERT_BATCH_SIZE) {
+      const slice = chunks.slice(i, i + INSERT_BATCH_SIZE);
+      const stmts = slice.map(
+        (c) =>
+          `INSERT INTO reedy_book_chunks
+             (id, book_hash, section_index, chapter_title, start_cfi, end_cfi, position_index, text, token_count)
+           VALUES (${sqlQuote(c.id)}, ${sqlQuote(c.bookHash)}, ${c.sectionIndex}, ${sqlQuoteNullable(c.chapterTitle)}, ${sqlQuote(c.startCfi)}, ${sqlQuote(c.endCfi)}, ${c.positionIndex}, ${sqlQuote(c.text)}, ${c.tokenCount})`,
+      );
+      await this.enqueue(() => this.db.batch(stmts));
+      options?.onProgress?.(Math.min(i + INSERT_BATCH_SIZE, chunks.length), chunks.length);
+    }
   }
 
   /**

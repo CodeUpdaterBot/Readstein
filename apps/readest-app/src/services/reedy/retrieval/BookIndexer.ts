@@ -9,8 +9,12 @@ const DEFAULT_BATCH_SIZE = 16;
 export interface IndexBookOptions {
   /** Override CfiChunker tuning. Falls back to chunker defaults. */
   chunkOptions?: Partial<ChunkOptions>;
-  /** Optional callback for progress reporting. Phases: 'chunking' | 'embedding'. */
-  onProgress?: (event: { phase: 'chunking' | 'embedding'; current: number; total: number }) => void;
+  /** Optional callback for progress reporting. Phases: 'chunking' | 'writing' | 'embedding'. */
+  onProgress?: (event: {
+    phase: 'chunking' | 'writing' | 'embedding';
+    current: number;
+    total: number;
+  }) => void;
   /** Optional chapter-title resolver; defaults to `Section ${i + 1}`. */
   getChapterTitle?: (sectionIndex: number) => string | null;
   /** AbortSignal honoured by the embedding model. */
@@ -123,7 +127,12 @@ export class BookIndexer {
       }
 
       await this.reedy.ensureEmbeddingsTable(dim);
-      await this.reedy.insertChunks(chunks);
+      await this.reedy.insertChunks(chunks, {
+        // Bounded transactions, so a long write reports progress instead of
+        // holding the lock silently (see ReedyDb.insertChunks).
+        onProgress: (done, total) =>
+          options.onProgress?.({ phase: 'writing', current: done, total }),
+      });
 
       await this.embedAndStore(chunks, model, dim, options);
 

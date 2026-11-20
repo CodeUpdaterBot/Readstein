@@ -51,8 +51,12 @@ export function LibraryIndexPanel({
           </p>
           {chunk ? (
             <p className='text-base-content/50 mt-0.5 text-[11px] tabular-nums'>
-              {chunk.phase === 'chunking' ? 'Reading pages' : 'Embedding'}: {chunk.current} /{' '}
-              {chunk.total}
+              {chunk.phase === 'chunking'
+                ? 'Reading pages'
+                : chunk.phase === 'writing'
+                  ? 'Saving'
+                  : 'Embedding'}
+              : {chunk.current} / {chunk.total}
             </p>
           ) : null}
         </div>

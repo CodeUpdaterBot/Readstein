@@ -19,8 +19,8 @@ export interface LibraryIndexProgress {
   bookIndex: number;
   totalBooks: number;
   bookTitle: string;
-  /** Per-book progress while one book is being read and embedded. */
-  chunkProgress?: { current: number; total: number; phase: 'chunking' | 'embedding' };
+  /** Per-book progress while one book is being read, written and embedded. */
+  chunkProgress?: { current: number; total: number; phase: 'chunking' | 'writing' | 'embedding' };
   indexed: number;
   skipped: number;
   empty: number;
@@ -195,7 +195,7 @@ export class LibraryIndexer {
       const emit = (chunkProgress?: {
         current: number;
         total: number;
-        phase: 'chunking' | 'embedding';
+        phase: 'chunking' | 'writing' | 'embedding';
       }): void =>
         options.onProgress?.({
           phase: 'indexing',
