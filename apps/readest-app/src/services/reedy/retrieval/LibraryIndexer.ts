@@ -14,13 +14,7 @@ import { resolveEmbeddingDim } from './BookIndexer';
 export type BookDocLoader = (book: Book) => Promise<BookDoc>;
 
 export interface LibraryIndexProgress {
-  /**
-   * 'finalizing' is the one bulk step after the last book: rebuilding the chunk
-   * FTS index that the sweep dropped (see ReedyDb.dropChunkFtsIndex). It is a
-   * single pass over the whole corpus, so it is reported rather than left
-   * looking like a hang.
-   */
-  phase: 'resolving' | 'indexing' | 'finalizing' | 'done';
+  phase: 'resolving' | 'indexing' | 'done';
   /** 1-based position of the book currently being indexed. */
   bookIndex: number;
   totalBooks: number;
@@ -174,12 +168,10 @@ export class LibraryIndexer {
       ...tally(),
     });
 
-    // Insert the whole corpus with the chunk-text FTS index dropped and rebuild
-    // it once at the end. Maintaining it per insert costs ~3s per 200 rows and
-    // grows with the index — quadratic over a shelf — while the same rows go in
-    // at ~370ms flat, and one bulk build over the result takes a fraction of a
-    // second (see ReedyDb.dropChunkFtsIndex). Search degrades to its vector half
-    // for the duration, which is already the documented behaviour.
+    // Chunks are written without any FTS index (see ReedyDb.dropChunkFtsIndex):
+    // maintaining one per insert was quadratic over a shelf and bloated the DB
+    // to 3.6GB. A sweep therefore begins by retiring it if an older build left
+    // one behind, which is idempotent and instant once it is gone.
     await this.reedy.dropChunkFtsIndex();
 
     let i = 0;
@@ -285,20 +277,6 @@ export class LibraryIndexer {
       }
       options.onBookDone?.(book);
     }
-
-    // One bulk index build over everything just written — the point of having
-    // dropped it up front. Announced first: it is a single pass over the whole
-    // corpus, so it must not look like a hang at 100%.
-    options.onProgress?.({
-      phase: 'finalizing',
-      bookIndex: kept.length,
-      totalBooks: kept.length,
-      bookTitle: '',
-      lastError,
-      notice,
-      ...tally(),
-    });
-    await this.reedy.rebuildChunkFtsIndex();
 
     options.onProgress?.({
       phase: 'done',

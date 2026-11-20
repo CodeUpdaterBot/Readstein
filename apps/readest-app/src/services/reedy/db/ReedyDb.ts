@@ -594,7 +594,7 @@ export class ReedyDb {
     k: number;
     spoilerBoundPosition?: number;
   }): Promise<ScoredChunk[]> {
-    const { bookHash, queryText, queryEmbedding, k, spoilerBoundPosition } = args;
+    const { bookHash, queryText: _queryText, queryEmbedding, k, spoilerBoundPosition } = args;
     if (k <= 0) return [];
 
     // A spoiler bound is a position inside ONE book's reading order, so it is
@@ -630,70 +630,33 @@ export class ReedyDb {
       [serializeVector(queryEmbedding), ...bookParam, ...spoilerParam, fetchK],
     );
 
-    // FTS path — Tantivy BM25 over the chunks.text column.
-    let ftsRows: ScoredChunkRowSql[] = [];
-    if (queryText.trim().length > 0) {
-      try {
-        ftsRows = await this.db.select<ScoredChunkRowSql>(
-          `SELECT c.id, c.book_hash, c.section_index, c.chapter_title,
-                  c.start_cfi, c.end_cfi, c.position_index, c.text, c.token_count,
-                  m.book_title, m.author_name,
-                  fts_score(c.text, ?) AS metric
-             FROM reedy_book_chunks c
-             LEFT JOIN reedy_book_meta m ON m.book_hash = c.book_hash
-            WHERE fts_match(c.text, ?)${bookClause.replace('%TBL%', 'c')}${spoilerClause}
-            ORDER BY metric DESC
-            LIMIT ?`,
-          [queryText, queryText, ...bookParam, ...spoilerParam, fetchK],
-        );
-      } catch {
-        // FTS index may legitimately be empty (no chunks yet) or the query
-        // may be malformed for Tantivy. The vector path is the primary
-        // signal; FTS is purely a lexical booster.
-        ftsRows = [];
-      }
-    }
-
-    return reciprocalRankFusion(vectorRows, ftsRows, k);
+    // Lexical ranking is deliberately absent here: the chunk FTS index is
+    // retired (see dropChunkFtsIndex), and re-deriving a lexical score with a
+    // LIKE scan on every query would cost more than it contributes. Routing
+    // picks the candidate books; the vector half ranks the chunks inside them.
+    return reciprocalRankFusion(vectorRows, [], k);
   }
 
   /**
-   * Drop the chunk-text FTS index so a bulk ingest can insert without paying
-   * for it, then restore it in one pass.
+   * Retire the chunk-text FTS index.
    *
-   * Maintaining that index inside every insert is what made a whole-shelf
-   * build impossible. Measured on this machine: a 200-row batch costs ~3.1s
-   * with the index present and the cost grows with the index (33.7s per batch
-   * by 2,400 rows) — quadratic over a corpus — while the same rows insert in
-   * ~370ms flat with the index absent, and a single bulk CREATE INDEX over
-   * 2,000 rows takes 241ms. The index is also ~10x the text on disk.
+   * It is no longer built or used. Measured on this machine it cost ~3.1s per
+   * 200-row insert and grew with the index (33.7s per batch by 2,400 rows) —
+   * quadratic over a shelf, and it bloated reedy.db to 3.6GB for ~260 works
+   * (the ngram variant is ~10x the text on disk). Rebuilding it over the whole
+   * corpus is a multi-minute single transaction. That is why the whole app went
+   * unresponsive: the rebuild held the serial DB queue that every read and
+   * write goes through.
    *
-   * Retrieval is unaffected: fts_match/fts_score answer identically against a
-   * rebuilt index, and they keep matching even while it is absent (the engine
-   * scans instead), so a search during a sweep loses speed, not correctness.
+   * The app's own library-search benchmark reached the same conclusion for the
+   * same reason: at per-book granularity an FTS index "cannot beat LIKE while
+   * costing 2.3x disk and 7x build time" (see migrations/library-search).
+   * Lexical routing now uses LIKE, and ranking is semantic.
+   *
+   * Idempotent, and instant once the index is gone — safe to call on open.
    */
   async dropChunkFtsIndex(): Promise<void> {
     await this.enqueue(() => this.db.execute('DROP INDEX IF EXISTS idx_chunks_fts'));
-  }
-
-  async rebuildChunkFtsIndex(): Promise<void> {
-    await this.enqueue(() =>
-      this.db.execute(
-        "CREATE INDEX IF NOT EXISTS idx_chunks_fts ON reedy_book_chunks USING fts (text) WITH (tokenizer = 'ngram')",
-      ),
-    );
-  }
-
-  /**
-   * Self-heal: a sweep drops the index while it ingests and restores it at the
-   * end, so a sweep killed mid-run leaves it absent and lexical search
-   * degraded. One sqlite_master lookup in the normal case.
-   */
-  async ensureChunkFtsIndex(): Promise<void> {
-    const rows = await this.db.select<{ name: string }>(
-      "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_chunks_fts'",
-    );
-    if (rows.length === 0) await this.rebuildChunkFtsIndex();
   }
 
   /**
@@ -703,17 +666,30 @@ export class ReedyDb {
    * handful of likely books before running exact vector search inside them,
    * which is what keeps a library-wide query bounded.
    */
+  /**
+   * Candidate books for a library-wide question, by lexical match on the
+   * query's significant words.
+   *
+   * This used to go through the Tantivy FTS index (`fts_match`). That index is
+   * retired (see dropChunkFtsIndex), and this is the app's own precedent for
+   * library search: LIKE at per-book granularity, which benchmarked faster than
+   * the FTS index and costs no disk. One pass over the chunk table, ranked by
+   * how many of a book's chunks hit.
+   */
   async ftsCandidateBooks(queryText: string, limit: number): Promise<string[]> {
     if (limit <= 0 || queryText.trim().length === 0) return [];
+    const words = [...new Set(queryText.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [])].slice(0, 4);
+    if (words.length === 0) return [];
+    const clauses = words.map(() => 'text LIKE ?').join(' OR ');
     try {
       const rows = await this.db.select<{ book_hash: string }>(
-        `SELECT c.book_hash, MAX(fts_score(c.text, ?)) AS metric
-           FROM reedy_book_chunks c
-          WHERE fts_match(c.text, ?)
-          GROUP BY c.book_hash
+        `SELECT book_hash, COUNT(*) AS metric
+           FROM reedy_book_chunks
+          WHERE ${clauses}
+          GROUP BY book_hash
           ORDER BY metric DESC
           LIMIT ?`,
-        [queryText, queryText, limit],
+        [...words.map((w) => `%${w}%`), limit],
       );
       return rows.map((r) => r.book_hash);
     } catch {

@@ -362,11 +362,13 @@ describe('ReedyDb', () => {
       expect(res[0]!.id).toBe('a3');
     });
 
-    it('ranks the FTS-matched chunk highly when query text matches that chunk', async () => {
+    it('ranks by the vector half — query text no longer reorders results', async () => {
       const res = await reedy.hybridSearch({
         bookHash: 'bookA',
+        // Textually closest to a4, but lexical ranking is retired: the vector
+        // decides, so the aligned chunk for [0,0,0,1] is what leads.
         queryText: 'jackfruit',
-        queryEmbedding: unitVec([1, 0, 0, 0]), // misaligned vector
+        queryEmbedding: unitVec([0, 0, 0, 1]),
         k: 5,
       });
       expect(res.length).toBeGreaterThan(0);
@@ -385,8 +387,8 @@ describe('ReedyDb', () => {
     });
   });
 
-  describe('chunk fts index lifecycle', () => {
-    it('inserts with the index dropped, and retrieval works again after rebuild', async () => {
+  describe('chunk ranking without an fts index', () => {
+    it('routes lexically by LIKE and ranks by the vector half', async () => {
       await reedy.dropChunkFtsIndex();
       await reedy.ensureEmbeddingsTable(4);
       await reedy.insertChunks([
@@ -398,26 +400,18 @@ describe('ReedyDb', () => {
         { chunkId: 'd2', bookHash: 'bookD', embedding: unitVec([0, 1, 0, 0]) },
       ]);
 
-      // While absent, retrieval still works rather than throwing.
-      const degraded = await reedy.hybridSearch({
-        queryText: 'pomegranate',
-        queryEmbedding: unitVec([1, 0, 0, 0]),
-        k: 5,
-      });
-      expect(degraded.length).toBeGreaterThan(0);
+      // Routing needs no index at all — it is a LIKE pass over the query words.
+      expect(await reedy.ftsCandidateBooks('pomegranate', 5)).toContain('bookD');
+      expect(await reedy.ftsCandidateBooks('nothingmatchesthis', 5)).toEqual([]);
 
-      await reedy.ensureChunkFtsIndex();
-      const candidates = await reedy.ftsCandidateBooks('pomegranate', 5);
-      expect(candidates).toContain('bookD');
-
-      const rebuilt = await reedy.hybridSearch({
+      // Ranking is the vector half.
+      const hits = await reedy.hybridSearch({
         bookHash: 'bookD',
         queryText: 'quince',
-        // Deliberately misaligned so the lexical half is what surfaces it.
-        queryEmbedding: unitVec([1, 0, 0, 0]),
+        queryEmbedding: unitVec([0, 1, 0, 0]),
         k: 5,
       });
-      expect(rebuilt.map((r) => r.id)).toContain('d2');
+      expect(hits[0]!.id).toBe('d2');
     });
   });
 

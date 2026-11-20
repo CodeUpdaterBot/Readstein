@@ -190,12 +190,12 @@ export class BookRetriever {
         .sort((a, b) => b.score - a.score)
         .slice(0, args.k);
     } else {
-      // No lexical candidate — one direct library-wide search for semantic recall.
-      scored = await this.reedy.hybridSearch({
-        queryText: args.query,
-        queryEmbedding,
-        k: args.k,
-      });
+      // No candidate book matched. Deliberately NOT falling back to a
+      // library-wide vector scan: that is a brute-force cosine over every chunk
+      // in the corpus — minutes at 200k chunks, and it is what made a vague
+      // question look like a hang. An empty result is honest, cheap and
+      // immediate; the caller already reports the degradation.
+      scored = [];
     }
 
     const passages = scored.map(toPassage);

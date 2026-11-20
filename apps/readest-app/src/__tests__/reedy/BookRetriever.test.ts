@@ -230,18 +230,18 @@ describe('BookRetriever', () => {
       }
     });
 
-    it('exact-quote query ranks the FTS-aligned chunk first (T2 FTS dominance)', async () => {
+    it('ranks by vector similarity — an exact quote no longer overrides it', async () => {
       const res = await retriever.search({
         bookHash: 'bookA',
         query: 'wrap-up',
         k: 3,
         activeEmbeddingModel: fakeModel({
-          // Vector points elsewhere so FTS has to win
-          embedFn: async (texts) => texts.map(() => unitVec([1, 0, 0, 0])),
+          // Lexical ranking is retired, so the vector decides which passage leads.
+          embedFn: async (texts) => texts.map(() => unitVec([0, 0, 1, 0])),
         }),
       });
       expect(res.status).toBe('ok');
-      expect(res.passages[0]!.id).toBe('a3');
+      expect(res.passages[0]!.id).toBe('a2');
     });
 
     it('paraphrase query without a lexical match ranks by vector similarity (T2 vector dominance)', async () => {

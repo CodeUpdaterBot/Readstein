@@ -22,10 +22,13 @@ export function openReedy(appService: AppService): Promise<ReedyHandle> {
         experimental: ['index_method'],
       });
       const db = new ReedyDb(svc);
-      // A library sweep drops the chunk-text FTS index while it bulk-inserts and
-      // restores it when it finishes; if that sweep never finished, restore it
-      // here so lexical search is not silently left degraded.
-      void db.ensureChunkFtsIndex().catch(() => {});
+      // The chunk-text FTS index is being retired (see ReedyDb.dropChunkFtsIndex)
+      // — it costs 2.3-10x disk and a multi-minute build for no retrieval win
+      // the app's own library-search benchmark could measure. Dropping it is
+      // idempotent and instant once it is gone. Never reBUILD it here: doing
+      // that on open held the serial DB queue for minutes and made the whole
+      // app, and every query behind it, look hung.
+      void db.dropChunkFtsIndex().catch(() => {});
       return { svc, db };
     })();
     shared = opening;
