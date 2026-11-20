@@ -28,6 +28,95 @@ import type {
 /** Rows per chunk-insert transaction — see {@link ReedyDb.insertChunks}. */
 const INSERT_BATCH_SIZE = 200;
 
+/**
+ * Words too common to route on. A query word that appears in half the shelf
+ * tells us nothing about which books to search, and matching it diluted the
+ * routing score badly enough that the same few large books won every question.
+ * Only used to pick which words to route on — never to filter the text itself.
+ */
+const ROUTING_STOPWORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'you',
+  'your',
+  'know',
+  'what',
+  'who',
+  'how',
+  'why',
+  'are',
+  'was',
+  'were',
+  'does',
+  'did',
+  'can',
+  'could',
+  'would',
+  'should',
+  'this',
+  'that',
+  'these',
+  'those',
+  'them',
+  'they',
+  'their',
+  'there',
+  'then',
+  'than',
+  'with',
+  'from',
+  'into',
+  'about',
+  'any',
+  'all',
+  'some',
+  'most',
+  'more',
+  'much',
+  'many',
+  'tell',
+  'say',
+  'said',
+  'says',
+  'now',
+  'not',
+  'but',
+  'get',
+  'got',
+  'has',
+  'have',
+  'had',
+  'its',
+  'our',
+  'out',
+  'was',
+  'were',
+  'been',
+  'being',
+  'truth',
+  'truths',
+  'big',
+  'biggest',
+  'largest',
+  'really',
+  'actually',
+  'entire',
+  'whole',
+  'corpus',
+  'library',
+  'books',
+  'book',
+  'trained',
+  'reveal',
+  'think',
+  'give',
+  'make',
+  'made',
+  'take',
+  'took',
+]);
+
 export class ReedyDb {
   /**
    * Serializes every DB-mutating call that goes through `batch()` because the
@@ -678,18 +767,30 @@ export class ReedyDb {
    */
   async ftsCandidateBooks(queryText: string, limit: number): Promise<string[]> {
     if (limit <= 0 || queryText.trim().length === 0) return [];
-    const words = [...new Set(queryText.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [])].slice(0, 4);
+    // Common words carry no signal but match almost every book, and because
+    // candidate books were once ranked by RAW hit count that meant the biggest
+    // books won every vaguely worded question ("...the biggest truths..."). Drop
+    // them, and rank by how many of the remaining words each chunk matches
+    // rather than by how many chunks match at all.
+    const words = [
+      ...new Set(
+        (queryText.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter(
+          (w) => !ROUTING_STOPWORDS.has(w),
+        ),
+      ),
+    ].slice(0, 4);
     if (words.length === 0) return [];
-    const clauses = words.map(() => 'text LIKE ?').join(' OR ');
+    const matches = words.map(() => '(text LIKE ?)').join(' + ');
+    const anyWord = words.map(() => 'text LIKE ?').join(' OR ');
     try {
       const rows = await this.db.select<{ book_hash: string }>(
-        `SELECT book_hash, COUNT(*) AS metric
+        `SELECT book_hash, SUM(${matches}) AS metric
            FROM reedy_book_chunks
-          WHERE ${clauses}
+          WHERE ${anyWord}
           GROUP BY book_hash
           ORDER BY metric DESC
           LIMIT ?`,
-        [...words.map((w) => `%${w}%`), limit],
+        [...words.map((w) => `%${w}%`), ...words.map((w) => `%${w}%`), limit],
       );
       return rows.map((r) => r.book_hash);
     } catch {
