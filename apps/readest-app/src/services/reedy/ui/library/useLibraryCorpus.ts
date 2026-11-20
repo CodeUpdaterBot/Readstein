@@ -103,10 +103,15 @@ export function useLibraryCorpus({
       const entry = opened.get(hash);
       if (!entry) return;
       opened.delete(hash);
-      const doc = entry.doc as unknown as { destroy?: () => void | Promise<void> };
-      void doc.destroy?.();
-      const file = entry.file as { close?: () => void | Promise<void> } | null;
-      void file?.close?.();
+      // Destroy THEN close, serialized, with both failures swallowed: a book
+      // document owns native handles, and a rejected teardown escaping as an
+      // unhandled rejection is exactly the "resource id is invalid" noise this
+      // produced. Teardown of a finished book must never take the app down.
+      void Promise.resolve()
+        .then(() => (entry.doc as unknown as { destroy?: () => unknown }).destroy?.())
+        .catch(() => undefined)
+        .then(() => (entry.file as { close?: () => unknown } | null)?.close?.())
+        .catch(() => undefined);
     };
 
     const load: BookDocLoader = async (book) => {

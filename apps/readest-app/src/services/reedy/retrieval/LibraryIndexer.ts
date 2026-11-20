@@ -234,6 +234,7 @@ export class LibraryIndexer {
         // single unreadable book cannot stop the whole sweep.
         if (options.signal?.aborted) {
           report.aborted = true;
+          options.onBookDone?.(book);
           break;
         }
         const message = err instanceof Error ? err.message : String(err);
@@ -249,6 +250,7 @@ export class LibraryIndexer {
         // whole shelf.
         if (report.indexed === 0 && consecutiveSameError >= 3) {
           emit();
+          options.onBookDone?.(book);
           break;
         }
         emit();
