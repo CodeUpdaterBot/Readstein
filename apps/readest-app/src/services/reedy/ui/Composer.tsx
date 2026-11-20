@@ -29,6 +29,7 @@ export function Composer({
   onSend,
   onAbort,
   disabled,
+  placeholder = 'Ask Reedy about this book…',
   skills,
   activeSkillId,
   onSkillSelect,
@@ -37,6 +38,7 @@ export function Composer({
   onSend: (text: string) => void;
   onAbort: () => void;
   disabled?: boolean;
+  placeholder?: string;
   skills?: Skill[];
   activeSkillId?: string | null;
   onSkillSelect?: (id: string | null) => void;
@@ -93,7 +95,7 @@ export function Composer({
         <textarea
           className='text-base-content placeholder:text-base-content/40 max-h-40 min-h-[1.75rem] flex-1 resize-none bg-transparent text-sm outline-none'
           rows={1}
-          placeholder='Ask Reedy about this book…'
+          placeholder={placeholder}
           value={text}
           disabled={disabled}
           onChange={(e) => setText(e.target.value)}

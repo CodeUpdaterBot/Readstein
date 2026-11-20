@@ -102,18 +102,27 @@ describe('Reedy migration', () => {
     expect(version[0]!.user_version).toBe(reedyMigrations.length);
   });
 
-  it('does not throw UNIQUE when a tracking row already exists (partial apply / first-open race)', async () => {
+  it('finishes a partial apply without throwing UNIQUE when a tracking row already exists', async () => {
     const reedyMigrations = getMigrations('reedy');
-    await db.execute(`CREATE TABLE IF NOT EXISTS __migrations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
-      applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-    await db.execute('INSERT INTO __migrations (name) VALUES (?)', [reedyMigrations[0]!.name]);
+    // A partial apply is a tracking row that exists only for a migration whose
+    // schema actually landed. Applying just the first migration reproduces that
+    // consistently (a row with no schema behind it cannot occur — the DDL and
+    // its row commit in one batch), and later migrations — including the
+    // ALTERs on reedy_book_meta — then have the table they depend on.
+    await migrate(db, reedyMigrations.slice(0, 1));
 
     await expect(migrate(db, reedyMigrations)).resolves.toBeUndefined();
 
     const tracked = await db.select<{ name: string }>('SELECT name FROM __migrations ORDER BY id');
     expect(tracked.map((r) => r.name)).toEqual(reedyMigrations.map((m) => m.name));
+  });
+
+  it('adds the library-scope identity columns to reedy_book_meta', async () => {
+    await migrate(db, getMigrations('reedy'));
+    const cols = await db.select<{ name: string }>('PRAGMA table_info(reedy_book_meta)');
+    const names = cols.map((c) => c.name);
+    expect(names).toContain('book_title');
+    expect(names).toContain('author_name');
+    expect(names).toContain('library_group');
   });
 });

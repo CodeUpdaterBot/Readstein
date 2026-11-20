@@ -299,4 +299,73 @@ describe('BookRetriever', () => {
       expect(res.passages[0]!.id).toBe('a0');
     });
   });
+
+  // -------------------------------------------------------------------------
+  // library scope (bookHash omitted → search every indexed work)
+  // -------------------------------------------------------------------------
+
+  describe('library scope', () => {
+    beforeEach(async () => {
+      await reedy.upsertBookMeta({
+        bookHash: 'bookA',
+        indexingStatus: 'indexed',
+        chunkCount: 2,
+        embeddingModel: 'fake-model',
+        embeddingDim: DIM,
+        indexedAt: Date.now(),
+        error: null,
+        bookTitle: 'Example Treatise Two',
+        authorName: 'Example Compiler Two',
+      });
+      await reedy.upsertBookMeta({
+        bookHash: 'bookB',
+        indexingStatus: 'indexed',
+        chunkCount: 1,
+        embeddingModel: 'fake-model',
+        embeddingDim: DIM,
+        indexedAt: Date.now(),
+        error: null,
+        bookTitle: 'Example Treatise',
+        authorName: 'Example Compiler',
+      });
+      await reedy.ensureEmbeddingsTable(DIM);
+      await reedy.insertChunks([
+        chunk('a0', 'bookA', 0, 'the inquisitorial tribunal and its procedures'),
+        chunk('a1', 'bookA', 1, 'a later unrelated passage about weather'),
+        chunk('b1', 'bookB', 0, 'the inquisitorial tribunal and its procedures'),
+      ]);
+      await reedy.insertEmbeddings([
+        { chunkId: 'a0', bookHash: 'bookA', embedding: unitVec([1, 0, 0, 0]) },
+        { chunkId: 'a1', bookHash: 'bookA', embedding: unitVec([0, 1, 0, 0]) },
+        { chunkId: 'b1', bookHash: 'bookB', embedding: unitVec([1, 0, 0, 0]) },
+      ]);
+    });
+
+    it('searches across every indexed book and names the source work', async () => {
+      const res = await retriever.search({
+        query: 'inquisitorial tribunal',
+        k: 10,
+        activeEmbeddingModel: fakeModel({
+          embedFn: async (texts) => texts.map(() => unitVec([1, 0, 0, 0])),
+        }),
+      });
+      expect(res.status).toBe('ok');
+      const books = new Set(res.passages.map((p) => p.bookHash));
+      expect(books.has('bookA')).toBe(true);
+      expect(books.has('bookB')).toBe(true);
+      expect(res.passages.every((p) => !!p.bookTitle)).toBe(true);
+      expect(res.passages.find((p) => p.bookHash === 'bookB')?.bookTitle).toBe('Example Treatise');
+    });
+
+    it('reports not_indexed when nothing in the library is indexed', async () => {
+      await svc.execute('DELETE FROM reedy_book_meta');
+      const res = await retriever.search({
+        query: 'anything',
+        k: 5,
+        activeEmbeddingModel: fakeModel(),
+      });
+      expect(res.status).toBe('not_indexed');
+      expect(res.passages).toEqual([]);
+    });
+  });
 });

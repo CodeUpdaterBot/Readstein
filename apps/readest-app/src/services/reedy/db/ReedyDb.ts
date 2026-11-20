@@ -64,15 +64,18 @@ export class ReedyDb {
     await this.enqueue(() =>
       this.db.execute(
         `INSERT INTO reedy_book_meta
-         (book_hash, indexing_status, chunk_count, embedding_model, embedding_dim, indexed_at, error)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+         (book_hash, indexing_status, chunk_count, embedding_model, embedding_dim, indexed_at, error, book_title, author_name, library_group)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(book_hash) DO UPDATE SET
          indexing_status = excluded.indexing_status,
          chunk_count     = excluded.chunk_count,
          embedding_model = excluded.embedding_model,
          embedding_dim   = excluded.embedding_dim,
          indexed_at      = excluded.indexed_at,
-         error           = excluded.error`,
+         error           = excluded.error,
+         book_title      = COALESCE(excluded.book_title, reedy_book_meta.book_title),
+         author_name     = COALESCE(excluded.author_name, reedy_book_meta.author_name),
+         library_group   = COALESCE(excluded.library_group, reedy_book_meta.library_group)`,
         [
           meta.bookHash,
           meta.indexingStatus,
@@ -81,6 +84,9 @@ export class ReedyDb {
           meta.embeddingDim,
           meta.indexedAt,
           meta.error,
+          meta.bookTitle ?? null,
+          meta.authorName ?? null,
+          meta.libraryGroup ?? null,
         ],
       ),
     );
@@ -95,6 +101,9 @@ export class ReedyDb {
       embedding_dim: number;
       indexed_at: number | null;
       error: string | null;
+      book_title: string | null;
+      author_name: string | null;
+      library_group: string | null;
     }>('SELECT * FROM reedy_book_meta WHERE book_hash = ?', [bookHash]);
     const row = rows[0];
     if (!row) return null;
@@ -106,7 +115,41 @@ export class ReedyDb {
       embeddingDim: row.embedding_dim,
       indexedAt: row.indexed_at,
       error: row.error,
+      bookTitle: row.book_title ?? null,
+      authorName: row.author_name ?? null,
+      libraryGroup: row.library_group ?? null,
     };
+  }
+
+  /**
+   * Every indexed book's meta row, for the library-scope indexer/status view.
+   * Ordered by hash so callers get a stable iteration order.
+   */
+  async listBookMeta(): Promise<BookMeta[]> {
+    const rows = await this.db.select<{
+      book_hash: string;
+      indexing_status: string;
+      chunk_count: number;
+      embedding_model: string;
+      embedding_dim: number;
+      indexed_at: number | null;
+      error: string | null;
+      book_title: string | null;
+      author_name: string | null;
+      library_group: string | null;
+    }>('SELECT * FROM reedy_book_meta ORDER BY book_hash');
+    return rows.map((row) => ({
+      bookHash: row.book_hash,
+      indexingStatus: row.indexing_status as IndexingStatus,
+      chunkCount: row.chunk_count,
+      embeddingModel: row.embedding_model,
+      embeddingDim: row.embedding_dim,
+      indexedAt: row.indexed_at,
+      error: row.error,
+      bookTitle: row.book_title ?? null,
+      authorName: row.author_name ?? null,
+      libraryGroup: row.library_group ?? null,
+    }));
   }
 
   async setIndexingStatus(
@@ -481,7 +524,12 @@ export class ReedyDb {
   // ---------------------------------------------------------------------------
 
   async hybridSearch(args: {
-    bookHash: string;
+    /**
+     * Restrict the search to one book. Omit for a **library-wide** search
+     * across every indexed work — the returned rows then carry the source
+     * work's title/author so the caller can cite which book a passage is from.
+     */
+    bookHash?: string;
     queryText: string;
     queryEmbedding: number[];
     k: number;
@@ -490,27 +538,37 @@ export class ReedyDb {
     const { bookHash, queryText, queryEmbedding, k, spoilerBoundPosition } = args;
     if (k <= 0) return [];
 
-    const spoilerClause = spoilerBoundPosition !== undefined ? ' AND c.position_index <= ?' : '';
-    const spoilerParam: unknown[] =
-      spoilerBoundPosition !== undefined ? [spoilerBoundPosition] : [];
+    // A spoiler bound is a position inside ONE book's reading order, so it is
+    // meaningless library-wide: only honoured on the book scope.
+    const applySpoiler = bookHash !== undefined && spoilerBoundPosition !== undefined;
+    const spoilerClause = applySpoiler ? ' AND c.position_index <= ?' : '';
+    const spoilerParam: unknown[] = applySpoiler ? [spoilerBoundPosition] : [];
+
+    // Book scope adds an equality predicate; library scope leaves it out so the
+    // whole table (every indexed work) is searched.
+    const bookClause = bookHash !== undefined ? ' AND %TBL%.book_hash = ?' : '';
+    const bookParam: unknown[] = bookHash !== undefined ? [bookHash] : [];
 
     // Over-fetch from each path so a chunk surfaced by one path still has a
     // chance to gain RRF mass from the other. Standard hybrid-search pattern.
     const fetchK = Math.max(k, k * RRF_FETCH_MULTIPLIER);
 
     // Vector path — brute-force cosine. Turso has no native vector index
-    // module so this is O(n) per book; sub-ms at MVP corpus sizes (see
-    // bench/vector-retrieval.bench.ts).
+    // module so this is O(n) per search; sub-ms at MVP per-book sizes (see
+    // bench/vector-retrieval.bench.ts). Library scope scales that to every
+    // indexed chunk, which is why callers route first (see LibraryRetriever).
     const vectorRows = await this.db.select<ScoredChunkRowSql>(
       `SELECT c.id, c.book_hash, c.section_index, c.chapter_title,
               c.start_cfi, c.end_cfi, c.position_index, c.text, c.token_count,
+              m.book_title, m.author_name,
               vector_distance_cos(e.embedding, vector32(?)) AS metric
          FROM reedy_book_chunk_embeddings e
          JOIN reedy_book_chunks c ON c.id = e.chunk_id
-        WHERE e.book_hash = ?${spoilerClause}
+         LEFT JOIN reedy_book_meta m ON m.book_hash = c.book_hash
+        WHERE 1 = 1${bookClause.replace('%TBL%', 'e')}${spoilerClause}
         ORDER BY metric ASC
         LIMIT ?`,
-      [serializeVector(queryEmbedding), bookHash, ...spoilerParam, fetchK],
+      [serializeVector(queryEmbedding), ...bookParam, ...spoilerParam, fetchK],
     );
 
     // FTS path — Tantivy BM25 over the chunks.text column.
@@ -520,12 +578,14 @@ export class ReedyDb {
         ftsRows = await this.db.select<ScoredChunkRowSql>(
           `SELECT c.id, c.book_hash, c.section_index, c.chapter_title,
                   c.start_cfi, c.end_cfi, c.position_index, c.text, c.token_count,
+                  m.book_title, m.author_name,
                   fts_score(c.text, ?) AS metric
              FROM reedy_book_chunks c
-            WHERE fts_match(c.text, ?) AND c.book_hash = ?${spoilerClause}
+             LEFT JOIN reedy_book_meta m ON m.book_hash = c.book_hash
+            WHERE fts_match(c.text, ?)${bookClause.replace('%TBL%', 'c')}${spoilerClause}
             ORDER BY metric DESC
             LIMIT ?`,
-          [queryText, queryText, bookHash, ...spoilerParam, fetchK],
+          [queryText, queryText, ...bookParam, ...spoilerParam, fetchK],
         );
       } catch {
         // FTS index may legitimately be empty (no chunks yet) or the query
@@ -536,6 +596,31 @@ export class ReedyDb {
     }
 
     return reciprocalRankFusion(vectorRows, ftsRows, k);
+  }
+
+  /**
+   * Cheap candidate generation for the library scope: the distinct books that
+   * have at least one chunk matching the query lexically, ranked by their best
+   * FTS score. Used by LibraryRetriever to route a library-wide question to a
+   * handful of likely books before running exact vector search inside them,
+   * which is what keeps a library-wide query bounded.
+   */
+  async ftsCandidateBooks(queryText: string, limit: number): Promise<string[]> {
+    if (limit <= 0 || queryText.trim().length === 0) return [];
+    try {
+      const rows = await this.db.select<{ book_hash: string }>(
+        `SELECT c.book_hash, MAX(fts_score(c.text, ?)) AS metric
+           FROM reedy_book_chunks c
+          WHERE fts_match(c.text, ?)
+          GROUP BY c.book_hash
+          ORDER BY metric DESC
+          LIMIT ?`,
+        [queryText, queryText, limit],
+      );
+      return rows.map((r) => r.book_hash);
+    } catch {
+      return [];
+    }
   }
 }
 
@@ -554,6 +639,8 @@ interface ScoredChunkRowSql {
   text: string;
   token_count: number;
   metric: number;
+  book_title?: string | null;
+  author_name?: string | null;
   [key: string]: unknown;
 }
 
@@ -568,6 +655,8 @@ function rowToChunk(row: ScoredChunkRowSql): Omit<ScoredChunk, 'score' | 'vector
     positionIndex: row.position_index,
     text: row.text,
     tokenCount: row.token_count,
+    bookTitle: row.book_title ?? null,
+    authorName: row.author_name ?? null,
   };
 }
 

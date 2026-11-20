@@ -15,6 +15,13 @@ export interface IndexBookOptions {
   getChapterTitle?: (sectionIndex: number) => string | null;
   /** AbortSignal honoured by the embedding model. */
   signal?: AbortSignal;
+  /**
+   * Display identity persisted on the book's meta row so library-scope
+   * searches can name the source work in a citation. Optional for the
+   * reader's per-book path (nothing library-wide reads it there), required in
+   * practice for the library indexer.
+   */
+  bookMeta?: { title?: string | null; author?: string | null; group?: string | null };
 }
 
 /**
@@ -77,6 +84,9 @@ export class BookIndexer {
       embeddingDim: 0,
       indexedAt: null,
       error: null,
+      bookTitle: options.bookMeta?.title ?? null,
+      authorName: options.bookMeta?.author ?? null,
+      libraryGroup: options.bookMeta?.group ?? null,
     });
     // Re-indexing must replace, not duplicate — drop any prior chunks +
     // embeddings for this book before writing the new ones. The meta row
@@ -96,6 +106,9 @@ export class BookIndexer {
         embeddingDim: dim,
         indexedAt: null,
         error: null,
+        bookTitle: options.bookMeta?.title ?? null,
+        authorName: options.bookMeta?.author ?? null,
+        libraryGroup: options.bookMeta?.group ?? null,
       });
 
       const chunks = await this.collectChunks(bookDoc, bookHash, options);

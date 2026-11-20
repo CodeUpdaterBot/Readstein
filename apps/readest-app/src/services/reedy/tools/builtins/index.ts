@@ -9,6 +9,11 @@ export { createGetSelectionTool } from './getSelection';
 export type { GetSelectionResult } from './getSelection';
 export { createLookupPassageTool } from './lookupPassage';
 export type { LookupPassageDeps, LookupPassageResult } from './lookupPassage';
+export { createLookupLibraryPassageTool } from './lookupLibraryPassage';
+export type {
+  LookupLibraryPassageDeps,
+  LookupLibraryPassageResult,
+} from './lookupLibraryPassage';
 export { createAddCitationTool } from './addCitation';
 export type { AddCitationResult } from './addCitation';
 export { createNavigateToCfiTool } from './navigateToCfi';

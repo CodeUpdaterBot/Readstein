@@ -1,4 +1,5 @@
 import type { ReedyDb } from '../db/ReedyDb';
+import type { ScoredChunk } from '../db/types';
 import type { EmbeddingModel } from '../models/EmbeddingModel';
 
 /**
@@ -24,6 +25,10 @@ export interface RetrievedChunk {
   positionIndex: number;
   /** Fused RRF score; informational only. */
   score: number;
+  /** Source work title (library scope only; null on the per-book path). */
+  bookTitle?: string | null;
+  /** Source work author (library scope only; null on the per-book path). */
+  authorName?: string | null;
 }
 
 export interface RetrieverResult {
@@ -34,16 +39,39 @@ export interface RetrieverResult {
 }
 
 export interface RetrieveArgs {
-  bookHash: string;
+  /**
+   * Restrict retrieval to one book. **Omit for a library-wide search** across
+   * every indexed work — each returned passage then names its source book via
+   * `bookTitle` / `bookHash`.
+   */
+  bookHash?: string;
   query: string;
   k: number;
   spoilerBoundPosition?: number;
   activeEmbeddingModel: EmbeddingModel;
   /** Query embedding wall-clock budget. @default 5000 */
   embeddingTimeoutMs?: number;
+  /**
+   * Library scope only: how many candidate books the cheap lexical router may
+   * forward to exact search. Bounds a library-wide query's work. @default 8
+   */
+  routeBooks?: number;
+  /**
+   * Library scope only: extra books to include in the rerank even when they
+   * did not surface lexically (semantic-only recall comes from the centroid
+   * path in a later phase; today this is a no-op hook). @default 0
+   */
+  semanticBooks?: string[];
 }
 
 const DEFAULT_EMBEDDING_TIMEOUT_MS = 5000;
+
+/**
+ * Library scope: how many lexically-routed candidate books may be forwarded to
+ * exact per-book search per query. Keeps a library-wide question bounded
+ * regardless of how many works are indexed.
+ */
+const DEFAULT_ROUTE_BOOKS = 8;
 
 /**
  * Per plan §M1.5 — wraps ReedyDb.hybridSearch with status detection and
@@ -61,6 +89,9 @@ export class BookRetriever {
   constructor(private readonly reedy: ReedyDb) {}
 
   async search(args: RetrieveArgs): Promise<RetrieverResult> {
+    if (args.bookHash === undefined) {
+      return this.searchLibrary(args);
+    }
     const meta = await this.reedy.getBookMeta(args.bookHash);
     if (!meta) {
       return { passages: [], status: 'not_indexed' };
@@ -104,23 +135,91 @@ export class BookRetriever {
       spoilerBoundPosition: args.spoilerBoundPosition,
     });
 
-    const passages: RetrievedChunk[] = scored.map((s) => ({
-      id: s.id,
-      bookHash: s.bookHash,
-      cfi: s.startCfi,
-      endCfi: s.endCfi,
-      sectionIndex: s.sectionIndex,
-      chapterTitle: s.chapterTitle,
-      text: s.text,
-      positionIndex: s.positionIndex,
-      score: s.score,
-    }));
+    const passages = scored.map(toPassage);
 
     if (degraded) {
       return { passages, status: 'degraded', reason };
     }
     return { passages, status: 'ok' };
   }
+
+  /**
+   * Library-wide retrieval (scope: 'library'). Two stages, because a brute-force
+   * cosine over every indexed chunk does not scale past a few books:
+   *
+   *   1. **Route** — a cheap lexical pass (`ftsCandidateBooks`) picks the handful
+   *      of books most likely to hold the answer.
+   *   2. **Exact search** — the ordinary, bounded per-book hybrid search runs
+   *      inside each routed book; results merge by RRF score.
+   *
+   * If routing finds nothing (e.g. a purely *semantic* question sharing no words
+   * with the text) we fall back to one direct library-wide search so recall is
+   * not lost — a phase-2 centroid router replaces that fallback.
+   */
+  private async searchLibrary(args: RetrieveArgs): Promise<RetrieverResult> {
+    const metas = await this.reedy.listBookMeta();
+    if (metas.length === 0) {
+      return { passages: [], status: 'not_indexed' };
+    }
+    const indexed = metas.filter((m) => m.indexingStatus === 'indexed' && m.chunkCount > 0);
+    if (indexed.length === 0) {
+      return { passages: [], status: 'empty_index' };
+    }
+
+    const timeoutMs = args.embeddingTimeoutMs ?? DEFAULT_EMBEDDING_TIMEOUT_MS;
+    const { embedding, degraded, reason } = await embedQueryWithTimeout(
+      args.activeEmbeddingModel,
+      args.query,
+      timeoutMs,
+    );
+    const queryEmbedding = embedding ?? new Array(args.activeEmbeddingModel.dim).fill(0);
+
+    const routeBooks = args.routeBooks ?? DEFAULT_ROUTE_BOOKS;
+    const routed = await this.reedy.ftsCandidateBooks(args.query, routeBooks);
+    const books = [...new Set([...routed, ...(args.semanticBooks ?? [])])];
+
+    let scored: ScoredChunk[];
+    if (books.length > 0) {
+      const perBook = await Promise.all(
+        books.map((bookHash) =>
+          this.reedy.hybridSearch({ bookHash, queryText: args.query, queryEmbedding, k: args.k }),
+        ),
+      );
+      scored = perBook
+        .flat()
+        .sort((a, b) => b.score - a.score)
+        .slice(0, args.k);
+    } else {
+      // No lexical candidate — one direct library-wide search for semantic recall.
+      scored = await this.reedy.hybridSearch({
+        queryText: args.query,
+        queryEmbedding,
+        k: args.k,
+      });
+    }
+
+    const passages = scored.map(toPassage);
+    if (degraded) {
+      return { passages, status: 'degraded', reason };
+    }
+    return { passages, status: 'ok' };
+  }
+}
+
+function toPassage(s: ScoredChunk): RetrievedChunk {
+  return {
+    id: s.id,
+    bookHash: s.bookHash,
+    cfi: s.startCfi,
+    endCfi: s.endCfi,
+    sectionIndex: s.sectionIndex,
+    chapterTitle: s.chapterTitle,
+    text: s.text,
+    positionIndex: s.positionIndex,
+    score: s.score,
+    bookTitle: s.bookTitle ?? null,
+    authorName: s.authorName ?? null,
+  };
 }
 
 async function embedQueryWithTimeout(

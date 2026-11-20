@@ -3,6 +3,7 @@ import React, { useRef } from 'react';
 import { FaChevronDown, FaSearch } from 'react-icons/fa';
 import { MdManageSearch, MdOutlineDonutLarge } from 'react-icons/md';
 import { PiPlus } from 'react-icons/pi';
+import { PiChatCircleDots } from 'react-icons/pi';
 import { PiSelectionAll, PiSelectionAllFill } from 'react-icons/pi';
 import { PiDotsThreeCircle } from 'react-icons/pi';
 import { MdOutlineMenu } from 'react-icons/md';
@@ -45,6 +46,8 @@ interface LibraryHeaderProps {
   onSearchTargetChange: (target: LibrarySearchTarget) => void;
   spiralMode: boolean;
   onToggleSpiral: () => void;
+  libraryChatOpen: boolean;
+  onToggleLibraryChat: () => void;
 }
 
 const LibraryHeader: React.FC<LibraryHeaderProps> = ({
@@ -69,6 +72,8 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
   onSearchTargetChange,
   spiralMode,
   onToggleSpiral,
+  libraryChatOpen,
+  onToggleLibraryChat,
 }) => {
   const _ = useTranslation();
   const { appService } = useEnv();
@@ -200,6 +205,22 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
                 <IoMdCloseCircle className='h-4 w-4' />
               </button>
             )}
+            {/* Ask your library: one AI conversation across every book, opened
+                as a companion pane. Sits beside the dial so the two
+                library-wide views cluster together. */}
+            <button
+              type='button'
+              aria-pressed={libraryChatOpen}
+              aria-label={_('Ask Your Library')}
+              title={_('Ask Your Library')}
+              onClick={onToggleLibraryChat}
+              className={clsx(
+                'touch-target flex h-6 items-center justify-center',
+                libraryChatOpen ? 'text-primary' : 'text-base-content/50 hover:text-base-content',
+              )}
+            >
+              <PiChatCircleDots className='h-5 w-5' />
+            </button>
             {/* Spiral (radial) view of the same search: available with or without
                 a query, so a search already in the box can be re-seen as a dial. The
                 cluster spaces itself with the group's own space-x — no divider rules,

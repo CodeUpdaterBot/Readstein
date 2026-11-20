@@ -4,7 +4,7 @@ import { memo } from 'react';
 import type { ReedyMessage, ReedyMessagePart } from '../store/reedyStore';
 import { AssistantTextPart, UserTextPart } from './parts/TextPart';
 import { ToolCallPart } from './parts/ToolCallPart';
-import { CitationPart } from './parts/CitationPart';
+import { CitationPart, type CitationHandler } from './parts/CitationPart';
 import { AbortPart, ErrorPart } from './parts/StatusParts';
 
 /**
@@ -21,7 +21,7 @@ export const MessageCard = memo(function MessageCard({
   onSourceClick,
 }: {
   message: ReedyMessage;
-  onSourceClick?: (cfi: string) => void;
+  onSourceClick?: CitationHandler;
 }) {
   if (message.role === 'user') {
     return (
@@ -52,7 +52,7 @@ function PartDispatcher({
   onSourceClick,
 }: {
   part: ReedyMessagePart;
-  onSourceClick?: (cfi: string) => void;
+  onSourceClick?: CitationHandler;
 }) {
   switch (part.type) {
     case 'text':

@@ -44,6 +44,12 @@ export type ReedyEvent =
       sectionIndex: number;
       chapterTitle?: string;
       snippet: string;
+      /**
+       * Source work, set on library-wide results. Absent on the per-book path,
+       * where every citation is from the book already open.
+       */
+      bookHash?: string;
+      bookTitle?: string;
     }
   | { type: 'memory_write'; scope: 'user' | 'book'; key: string; summary: string }
   | { type: 'step_finish'; step: number; reason: 'stop' | 'tool-calls' | 'length' }
@@ -94,6 +100,8 @@ export const events = {
     sectionIndex: number;
     chapterTitle?: string;
     snippet: string;
+    bookHash?: string;
+    bookTitle?: string;
   }): ReedyEvent {
     return { type: 'citation', ...args };
   },

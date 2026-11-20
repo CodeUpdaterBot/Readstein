@@ -49,6 +49,9 @@ export interface CitationLike {
   sectionIndex: number;
   chapterTitle?: string;
   snippet: string;
+  /** Source work. Set by the library lookup tool; absent per-book. */
+  bookHash?: string;
+  bookTitle?: string;
 }
 
 export interface AgentRuntimeOptions {
@@ -274,13 +277,22 @@ export class AgentRuntime {
 }
 
 function defaultExtractCitations(toolName: string, result: unknown): CitationLike[] {
-  if (toolName === 'lookupPassage' && result && typeof result === 'object') {
+  // Both lookup tools return `{ passages: [{ cfi, chapter, sectionIndex, text,
+  // bookHash?, bookTitle? }] }`. The library variant carries the source work so
+  // a citation from any shelf book can be opened in the reader.
+  if (
+    (toolName === 'lookupPassage' || toolName === 'lookupLibraryPassage') &&
+    result &&
+    typeof result === 'object'
+  ) {
     const r = result as {
       passages?: Array<{
         cfi?: string;
         chapter?: string;
         sectionIndex?: number;
         text?: string;
+        bookHash?: string;
+        bookTitle?: string;
       }>;
     };
     if (!Array.isArray(r.passages)) return [];
@@ -291,6 +303,8 @@ function defaultExtractCitations(toolName: string, result: unknown): CitationLik
         sectionIndex: p.sectionIndex ?? 0,
         chapterTitle: p.chapter,
         snippet: (p.text ?? '').slice(0, 200),
+        bookHash: p.bookHash,
+        bookTitle: p.bookTitle,
       }));
   }
   if (toolName === 'addCitation' && result && typeof result === 'object') {

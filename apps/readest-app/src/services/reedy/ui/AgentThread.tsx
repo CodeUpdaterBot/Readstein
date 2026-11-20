@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { VList, type VListHandle } from 'virtua';
 import type { ReedyMessage } from '../store/reedyStore';
 import { MessageCard } from './MessageCard';
+import type { CitationHandler } from './parts/CitationPart';
 
 /**
  * Virtua-virtualized thread scroller (Phase 4.2.b).
@@ -21,7 +22,7 @@ export function AgentThread({
 }: {
   messages: ReedyMessage[];
   isRunning: boolean;
-  onSourceClick?: (cfi: string) => void;
+  onSourceClick?: CitationHandler;
   emptyState?: React.ReactNode;
 }) {
   const ref = useRef<VListHandle>(null);

@@ -27,6 +27,14 @@ export interface ChunkOptions {
   overlapSize: number;
   /** Maximum chars to search left/right of the target boundary for a break-point. */
   breakSearchRange: number;
+  /**
+   * Extra class names whose subtrees are excluded from chunk text, on top of
+   * the always-skipped `cfi-inert`. The library corpus passes `source-text`
+   * here so a Markdown translation contributes its **English only** — the
+   * source-language column (emitted by `markTranslationColumns`) is left out.
+   * Unset on the reader's per-book path, whose text is unchanged.
+   */
+  skipClasses: string[];
 }
 
 const DEFAULT_OPTIONS: ChunkOptions = {
@@ -34,9 +42,12 @@ const DEFAULT_OPTIONS: ChunkOptions = {
   minChunkSize: 100,
   overlapSize: 50,
   breakSearchRange: 50,
+  skipClasses: [],
 };
 
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
+/** Always excluded regardless of options. */
+const ALWAYS_SKIP_CLASSES = ['cfi-inert'];
 
 interface TextSlice {
   node: Text;
@@ -48,7 +59,10 @@ interface TextSlice {
  * Walk the document body collecting text nodes alongside their position in
  * the flat concatenated string we use for break-point detection.
  */
-function collectTextNodes(doc: Document): { slices: TextSlice[]; flatText: string } {
+function collectTextNodes(
+  doc: Document,
+  skipClasses: Set<string>,
+): { slices: TextSlice[]; flatText: string } {
   const body = doc.body ?? doc.documentElement;
   if (!body) return { slices: [], flatText: '' };
 
@@ -58,7 +72,12 @@ function collectTextNodes(doc: Document): { slices: TextSlice[]; flatText: strin
       while (p && p.nodeType === 1) {
         const el = p as Element;
         if (SKIP_TAGS.has(el.tagName)) return NodeFilter.FILTER_REJECT;
-        if (el.classList?.contains('cfi-inert')) return NodeFilter.FILTER_REJECT;
+        const classes = el.classList;
+        if (classes && skipClasses.size > 0) {
+          for (const cls of skipClasses) {
+            if (classes.contains(cls)) return NodeFilter.FILTER_REJECT;
+          }
+        }
         p = p.parentNode;
       }
       return (node.nodeValue ?? '').length > 0 ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
@@ -145,7 +164,8 @@ export function chunkSection(
   options?: Partial<ChunkOptions>,
 ): ChunkRow[] {
   const opts: ChunkOptions = { ...DEFAULT_OPTIONS, ...options };
-  const { slices, flatText } = collectTextNodes(doc);
+  const skipClasses = new Set([...ALWAYS_SKIP_CLASSES, ...opts.skipClasses]);
+  const { slices, flatText } = collectTextNodes(doc, skipClasses);
   if (flatText.trim().length === 0 || slices.length === 0) return [];
 
   const totalLen = flatText.length;

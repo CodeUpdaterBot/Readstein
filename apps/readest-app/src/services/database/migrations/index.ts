@@ -300,6 +300,19 @@ const migrations: Record<SchemaType, MigrationEntry[]> = {
         );
       `,
     },
+    {
+      // Library-wide retrieval scope. Book identity moves onto the meta row so a
+      // scope:'library' search can name the work it came from (title/author/group)
+      // without a second lookup — the citation chip in the library chat reads
+      // straight off the retrieved chunk. Nullable: rows indexed before the
+      // library scope existed keep NULL and fall back to the record's own title.
+      name: '2026111901_reedy_library_scope',
+      sql: `
+        ALTER TABLE reedy_book_meta ADD COLUMN book_title TEXT;
+        ALTER TABLE reedy_book_meta ADD COLUMN author_name TEXT;
+        ALTER TABLE reedy_book_meta ADD COLUMN library_group TEXT;
+      `,
+    },
   ],
 };
 

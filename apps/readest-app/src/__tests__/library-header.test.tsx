@@ -55,6 +55,8 @@ describe('the library header search bar', () => {
         onSearchTargetChange={() => {}}
         spiralMode={false}
         onToggleSpiral={() => {}}
+        libraryChatOpen={false}
+        onToggleLibraryChat={() => {}}
       />,
     );
 

@@ -15,6 +15,15 @@ export interface BookMeta {
   embeddingDim: number;
   indexedAt: number | null;
   error: string | null;
+  /**
+   * Display identity for library-scope citations. Nullable — rows indexed
+   * before the library scope existed have none, and the caller falls back to
+   * the library record's own title/author.
+   */
+  bookTitle?: string | null;
+  authorName?: string | null;
+  /** The record's groupName at index time (e.g. 'Books/Translations'). */
+  libraryGroup?: string | null;
 }
 
 export interface ChunkRow {
@@ -44,6 +53,10 @@ export interface ScoredChunk extends ChunkRow {
   score: number;
   vectorRank: number | null;
   ftsRank: number | null;
+  /** Source work title, filled on library-scope searches (null otherwise). */
+  bookTitle?: string | null;
+  /** Source work author, filled on library-scope searches (null otherwise). */
+  authorName?: string | null;
 }
 
 // ---------------------------------------------------------------------------

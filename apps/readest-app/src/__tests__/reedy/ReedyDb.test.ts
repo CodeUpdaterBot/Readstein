@@ -73,7 +73,83 @@ describe('ReedyDb', () => {
         embeddingDim: DIM,
         indexedAt: 1700000000,
         error: null,
+        bookTitle: null,
+        authorName: null,
+        libraryGroup: null,
       });
+    });
+
+    it('round-trips the library-scope identity fields (title/author/group)', async () => {
+      await reedy.upsertBookMeta({
+        bookHash: 'bk-lib',
+        indexingStatus: 'indexed',
+        chunkCount: 7,
+        embeddingModel: 'text-embedding-3-small',
+        embeddingDim: DIM,
+        indexedAt: 1700000001,
+        error: null,
+        bookTitle: 'Example Treatise',
+        authorName: 'Example Compiler',
+        libraryGroup: 'Books/Translations',
+      });
+
+      const meta = await reedy.getBookMeta('bk-lib');
+      expect(meta?.bookTitle).toBe('Example Treatise');
+      expect(meta?.authorName).toBe('Example Compiler');
+      expect(meta?.libraryGroup).toBe('Books/Translations');
+    });
+
+    it('upsert without identity preserves the previously stored identity', async () => {
+      await reedy.upsertBookMeta({
+        bookHash: 'bk-keep',
+        indexingStatus: 'indexing',
+        chunkCount: 0,
+        embeddingModel: 'm',
+        embeddingDim: DIM,
+        indexedAt: null,
+        error: null,
+        bookTitle: 'Example Folio',
+        authorName: null,
+        libraryGroup: 'Books',
+      });
+      // A later status-only write (as the indexer issues mid-run) must not wipe it.
+      await reedy.setIndexingStatus('bk-keep', 'indexed', { chunkCount: 3 });
+      await reedy.upsertBookMeta({
+        bookHash: 'bk-keep',
+        indexingStatus: 'indexed',
+        chunkCount: 3,
+        embeddingModel: 'm',
+        embeddingDim: DIM,
+        indexedAt: 1700000002,
+        error: null,
+      });
+
+      const meta = await reedy.getBookMeta('bk-keep');
+      expect(meta?.bookTitle).toBe('Example Folio');
+      expect(meta?.libraryGroup).toBe('Books');
+    });
+
+    it('listBookMeta returns every indexed book ordered by hash', async () => {
+      await reedy.upsertBookMeta({
+        bookHash: 'b-two',
+        indexingStatus: 'indexed',
+        chunkCount: 1,
+        embeddingModel: 'm',
+        embeddingDim: DIM,
+        indexedAt: null,
+        error: null,
+      });
+      await reedy.upsertBookMeta({
+        bookHash: 'a-one',
+        indexingStatus: 'indexed',
+        chunkCount: 2,
+        embeddingModel: 'm',
+        embeddingDim: DIM,
+        indexedAt: null,
+        error: null,
+      });
+      const metas = await reedy.listBookMeta();
+      expect(metas.map((m) => m.bookHash)).toEqual(['a-one', 'b-two']);
     });
 
     it('setIndexingStatus preserves untouched fields (partial update)', async () => {

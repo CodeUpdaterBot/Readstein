@@ -111,6 +111,7 @@ import {
 } from './utils/libraryUtils';
 import Spinner from '@/components/Spinner';
 import LibraryHeader from './components/LibraryHeader';
+import { LibraryAssistant } from '@/services/reedy/ui/library/LibraryAssistant';
 import LibraryMemberFilter from './components/LibraryMemberFilter';
 import Bookshelf from './components/Bookshelf';
 import LibraryEmptyState from './components/LibraryEmptyState';
@@ -243,6 +244,9 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   // transfer progress tick (~10/sec per active upload), freezing the app
   // during a bulk cloud upload (issue #5047).
   const isTransferQueueOpen = useTransferStore((state) => state.isTransferQueueOpen);
+  // The live shelf, for the library-wide chat: a cited work is resolved back to
+  // its record so a citation can be opened in the reader.
+  const currentBookshelf = useLibraryStore((state) => state.currentBookshelf);
 
   // Library page pulls user replicas (dictionaries, custom fonts,
   // background textures, OPDS catalogs, Audiobookshelf servers, bundled
@@ -277,6 +281,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   // Spiral (radial) view of the same search. Kept in the URL so the view survives
   // a reload and a back-navigation, exactly like the other search options.
   const [spiralMode, setSpiralMode] = useState(searchParams?.get('spiral') === '1');
+  const [libraryChatOpen, setLibraryChatOpen] = useState(false);
   const pendingLibrarySearchQueryRef = useRef<string | null>(null);
   const [librarySearchProgress, setLibrarySearchProgress] = useState<number | null>(null);
   const [librarySearchHistory, setLibrarySearchHistory] = useState<string[]>([]);
@@ -1187,6 +1192,16 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   // Opening a work from the dial without a search behind it: no cfi, no query, so
   // the reader behaves exactly as if the book had been tapped on the shelf.
   const handleOpenSpiralBook = useCallback((book: Book) => void openBook(book), [openBook]);
+  // A citation in the library chat names the work it came from; open that book
+  // in the reader at the cited CFI, highlighting the passage.
+  const handleOpenLibraryCitation = useCallback(
+    (bookHash: string | null, cfi: string) => {
+      if (!bookHash) return;
+      const book = currentBookshelf.find((b) => b.hash === bookHash);
+      if (book) void openBook(book, cfi, { highlightSearchResult: true });
+    },
+    [currentBookshelf, openBook],
+  );
   const toggleSpiralMode = useCallback(() => {
     setSpiralMode((current) => !current);
   }, []);
@@ -2008,6 +2023,8 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
           onSearchTargetChange={handleSearchTargetChange}
           spiralMode={spiralMode}
           onToggleSpiral={toggleSpiralMode}
+          libraryChatOpen={libraryChatOpen}
+          onToggleLibraryChat={() => setLibraryChatOpen((open) => !open)}
         />
         <progress
           aria-label={_('Library Search Progress')}
@@ -2213,6 +2230,17 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
         <ModalPortal>
           <TransferQueuePanel />
         </ModalPortal>
+      )}
+      {libraryChatOpen && (
+        <div className='fixed inset-y-0 end-0 z-50 flex w-full max-w-[26rem] flex-col shadow-xl'>
+          <LibraryAssistant
+            appService={appService}
+            books={currentBookshelf}
+            aiSettings={settings?.aiSettings}
+            onOpenCitation={handleOpenLibraryCitation}
+            onClose={() => setLibraryChatOpen(false)}
+          />
+        </div>
       )}
       <AboutWindow />
       <KeyboardShortcutsHelp />
