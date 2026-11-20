@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import * as CFI from 'foliate-js/epubcfi.js';
-import { chunkSection } from '@/services/reedy/retrieval/CfiChunker';
+import { chunkPlainText, chunkSection } from '@/services/reedy/retrieval/CfiChunker';
 
 function makeDoc(bodyHtml: string): Document {
   return new DOMParser().parseFromString(
@@ -156,5 +156,31 @@ describe('CfiChunker', () => {
     expect(chunks.length).toBeGreaterThan(0);
     expect(chunks.map((c) => c.text).join(' ')).toContain('word0 from the OCR layer');
     expect(chunks.map((c) => c.text).join(' ')).toContain('word39 from the OCR layer');
+  });
+});
+
+describe('chunkPlainText', () => {
+  it('chunks plain text with no document, giving every chunk the section-level cfi', () => {
+    const chunks = chunkPlainText('word '.repeat(600), 3, 'Page 4', 'bk');
+    expect(chunks.length).toBeGreaterThan(1);
+    // sectionIndex 3 -> spine step (3+1)*2 = 8
+    expect(chunks[0]!.startCfi).toBe('epubcfi(/6/8!)');
+    expect(chunks.every((c) => c.startCfi === c.endCfi)).toBe(true);
+    expect(chunks[0]!.sectionIndex).toBe(3);
+    expect(chunks[0]!.id).toBe('bk-3-0');
+    expect(chunks.every((c) => c.tokenCount > 0)).toBe(true);
+    // Text is preserved, not dropped: the windows cover the source.
+    expect(chunks.length).toBeGreaterThanOrEqual(Math.floor(3000 / 500));
+  });
+
+  it('emits nothing for blank text', () => {
+    expect(chunkPlainText('   \n  ', 0, 'Ch', 'bk')).toEqual([]);
+  });
+
+  it('emits a single chunk for a section shorter than the minimum', () => {
+    const chunks = chunkPlainText('a short page', 1, 'Ch', 'bk');
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]!.text).toBe('a short page');
+    expect(chunks[0]!.startCfi).toBe('epubcfi(/6/4!)');
   });
 });

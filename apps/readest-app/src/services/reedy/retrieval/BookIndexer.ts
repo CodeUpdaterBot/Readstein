@@ -2,7 +2,7 @@ import type { BookDoc } from '@/libs/document';
 import { ReedyDb } from '../db/ReedyDb';
 import type { ChunkRow, EmbeddingRow } from '../db/types';
 import type { EmbeddingModel } from '../models/EmbeddingModel';
-import { chunkSection, type ChunkOptions } from './CfiChunker';
+import { chunkPlainText, chunkSection, type ChunkOptions } from './CfiChunker';
 
 const DEFAULT_BATCH_SIZE = 16;
 
@@ -19,6 +19,13 @@ export interface IndexBookOptions {
   getChapterTitle?: (sectionIndex: number) => string | null;
   /** AbortSignal honoured by the embedding model. */
   signal?: AbortSignal;
+  /**
+   * Take a section's plain text when its format can give it without a document
+   * (see {@link BookIndexer.plainSectionText}). Set by the library corpus: a
+   * whole shelf of large PDFs cannot afford pdf.js's per-page TextLayer. The
+   * reader's per-book path leaves this off, so its output is unchanged.
+   */
+  textOnly?: boolean;
   /**
    * Display identity persisted on the book's meta row so library-scope
    * searches can name the source work in a citation. Optional for the
@@ -155,18 +162,47 @@ export class BookIndexer {
   ): Promise<ChunkRow[]> {
     const all: ChunkRow[] = [];
     const sections = bookDoc.sections;
+    // TEMPORARY DIAGNOSTIC: where does a book's time actually go?
+    let docMs = 0;
+    let chunkMs = 0;
+    let plainSections = 0;
     for (let i = 0; i < sections.length; i++) {
       options.onProgress?.({ phase: 'chunking', current: i, total: sections.length });
       const section = sections[i]!;
-      let doc: Document;
-      try {
-        doc = await section.createDocument();
-      } catch (err) {
-        console.warn('[Reedy] section createDocument failed', { sectionIndex: i, err });
-        continue;
-      }
       const title = options.getChapterTitle?.(i) ?? `Section ${i + 1}`;
-      const sectionChunks = chunkSection(doc, i, title, bookHash, options.chunkOptions);
+      const tChunk = performance.now();
+      let sectionChunks: ChunkRow[] | null = null;
+
+      // Cheapest first: a section whose format can hand over plain text costs
+      // no document at all. Falls through to the DOM path for anything else.
+      if (options.textOnly) {
+        const plain = await this.plainSectionText(section);
+        if (plain != null) {
+          plainSections++;
+          sectionChunks = chunkPlainText(plain, i, title, bookHash, options.chunkOptions);
+        }
+      }
+
+      if (sectionChunks == null) {
+        let doc: Document;
+        const tDoc = performance.now();
+        try {
+          doc = await section.createDocument();
+        } catch (err) {
+          console.warn('[Reedy] section createDocument failed', { sectionIndex: i, err });
+          chunkMs += performance.now() - tChunk;
+          continue;
+        }
+        docMs += performance.now() - tDoc;
+        sectionChunks = chunkSection(doc, i, title, bookHash, options.chunkOptions);
+      }
+      chunkMs += performance.now() - tChunk;
+      if (i < 12 || i % 50 === 0) {
+        console.info(
+          `[reedy-timing] ${bookHash} sec ${i}/${sections.length} chunks=${all.length} ` +
+            `plain=${plainSections} docMs=${Math.round(docMs)} chunkMs=${Math.round(chunkMs)}`,
+        );
+      }
       // Rewrite the position index to be monotonic across the whole book —
       // CfiChunker numbers within a section, the indexer needs a global order.
       for (const c of sectionChunks) {
@@ -174,7 +210,39 @@ export class BookIndexer {
       }
     }
     options.onProgress?.({ phase: 'chunking', current: sections.length, total: sections.length });
+    console.info(
+      `[reedy-timing] collectChunks ${bookHash} sections=${sections.length} chunks=${all.length} ` +
+        `plain=${plainSections} chars=${all.reduce((n, c) => n + c.text.length, 0)} docMs=${Math.round(docMs)} chunkMs=${Math.round(chunkMs)}`,
+    );
     return all;
+  }
+
+  /**
+   * A section's plain text, when its format can produce it without a document.
+   * PDFs can — `loadPlainText` reads pdf.js's raw text content — and that is the
+   * difference between minutes and hours on a large scanned book, because the
+   * DOM route runs pdf.js's TextLayer (font metrics + a rAF-driven render) once
+   * per page.
+   *
+   * Markup is deliberately refused: the DOM path is where class-based
+   * exclusions actually get applied, so the English-only corpus (which must
+   * drop a `source-text` column) has to go through it.
+   *
+   * Note the name: `loadText` is taken, and means the section's *markup* to the
+   * nav/TOC pipeline. This must never be reachable through that name.
+   */
+  private async plainSectionText(section: unknown): Promise<string | null> {
+    const loadPlainText = (section as { loadPlainText?: () => Promise<string | null> })
+      .loadPlainText;
+    if (typeof loadPlainText !== 'function') return null;
+    try {
+      const text = await loadPlainText.call(section);
+      if (typeof text !== 'string' || text.trim().length === 0) return null;
+      if (text.includes('<')) return null;
+      return text;
+    } catch {
+      return null;
+    }
   }
 
   private async embedAndStore(

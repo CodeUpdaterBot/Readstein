@@ -210,7 +210,14 @@ export class LibraryIndexer {
 
       emit();
       try {
+        // TEMPORARY DIAGNOSTIC: opening the file vs indexing it.
+        const tLoad = performance.now();
         const doc = await loadBookDoc(book);
+        const loadMs = performance.now() - tLoad;
+        console.info(
+          `[reedy-timing] opened ${book.hash} "${book.title}" loadMs=${Math.round(loadMs)} sections=${doc.sections.length}`,
+        );
+        const tBook = performance.now();
         await this.indexer.indexBook(doc, book.hash, model, {
           bookMeta: {
             title: book.title,
@@ -220,10 +227,17 @@ export class LibraryIndexer {
           // English-only corpus: a Markdown translation contributes its English
           // column, not the Latin/German source it sits beside.
           chunkOptions: { skipClasses: LIBRARY_CORPUS_SKIP_CLASSES },
+          // A shelf of large PDFs cannot pay pdf.js's per-page TextLayer; take
+          // each section's plain text where the format offers it.
+          textOnly: true,
           onProgress: (e) => emit({ current: e.current, total: e.total, phase: e.phase }),
           signal: options.signal,
         });
         const after = await this.reedy.getBookMeta(book.hash);
+        console.info(
+          `[reedy-timing] book ${book.hash} "${book.title}" loadMs=${Math.round(loadMs)} ` +
+            `bookMs=${Math.round(performance.now() - tBook)} status=${after?.indexingStatus} chunks=${after?.chunkCount}`,
+        );
         if (after?.indexingStatus === 'empty_index') report.empty++;
         else if (after?.indexingStatus === 'indexed') report.indexed++;
         else report.failed++;

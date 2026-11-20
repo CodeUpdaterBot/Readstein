@@ -608,6 +608,29 @@ export const makePDF = async file => {
             }
             return doc
         },
+        /**
+         * The page's words, with none of the page's machinery.
+         *
+         * `createDocument` runs pdf.js's TextLayer: it probes canvas font
+         * metrics and drives its render off requestAnimationFrame, per page.
+         * That is right for reading, and far too heavy for anything that only
+         * needs the text — a corpus pass over a 441-page PDF paying it once per
+         * page is why indexing such a book took hours. getTextContent() is the
+         * raw extraction underneath, and this is what search/indexing wants.
+         *
+         * Deliberately NOT named `loadText`: that name already means "the
+         * section's markup" to the nav/TOC pipeline, which sniffs `loadText`
+         * and would start treating raw page text as HTML.
+         */
+        loadPlainText: async () => {
+            const page = await getPage(i)
+            const content = await page.getTextContent()
+            return content.items
+                .map(item => ('str' in item ? item.str : ''))
+                .join(' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+        },
         size: 1000,
     }))
     book.isExternal = uri => /^\w+:/i.test(uri)

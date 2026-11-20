@@ -156,6 +156,35 @@ function tokenCount(text: string): number {
   return trimmed.split(/\s+/).length;
 }
 
+/**
+ * Split a section's flat text into chunk windows, snapping each boundary to a
+ * paragraph/sentence/word break. Shared by the DOM chunker and the plain-text
+ * chunker so the two can never drift apart.
+ */
+function planWindows(text: string, opts: ChunkOptions): Array<{ start: number; end: number }> {
+  const totalLen = text.length;
+  // Below the minimum chunk size, emit the whole section as one chunk so very
+  // short sections (a single paragraph, a back-cover blurb) still get indexed.
+  if (totalLen < opts.minChunkSize) return [{ start: 0, end: totalLen }];
+
+  const windows: Array<{ start: number; end: number }> = [];
+  let cursor = 0;
+  while (cursor < totalLen) {
+    const targetEnd = cursor + opts.maxChunkSize;
+    if (targetEnd >= totalLen) {
+      windows.push({ start: cursor, end: totalLen });
+      break;
+    }
+    const snappedEnd = findBreakPoint(text, targetEnd, opts.breakSearchRange);
+    // Guarantee forward progress even if the breakpoint search returns <= cursor.
+    const end = snappedEnd > cursor ? snappedEnd : Math.min(totalLen, cursor + opts.maxChunkSize);
+    windows.push({ start: cursor, end });
+    cursor = end > opts.overlapSize ? end - opts.overlapSize : end;
+    if (cursor >= totalLen) break;
+  }
+  return windows;
+}
+
 export function chunkSection(
   doc: Document,
   sectionIndex: number,
@@ -168,38 +197,55 @@ export function chunkSection(
   const { slices, flatText } = collectTextNodes(doc, skipClasses);
   if (flatText.trim().length === 0 || slices.length === 0) return [];
 
-  const totalLen = flatText.length;
-  // Below the minimum chunk size, emit the whole section as one chunk so very
-  // short sections (a single paragraph, a back-cover blurb) still get indexed.
-  if (totalLen < opts.minChunkSize) {
-    return buildChunks(
-      [{ start: 0, end: totalLen }],
-      flatText,
-      slices,
-      doc,
+  const windows = planWindows(flatText, opts);
+  return buildChunks(windows, flatText, slices, doc, sectionIndex, chapterTitle, bookHash);
+}
+
+/**
+ * Chunk a section from its plain text, with no document at all.
+ *
+ * The library corpus only needs a book's words, and for a PDF the document is
+ * expensive: `createDocument()` runs pdf.js's TextLayer — canvas font metrics
+ * plus a requestAnimationFrame-driven render — once per page, which turned a
+ * 441-page book into hours of work. Chunks take the section-level CFI and carry
+ * `sectionIndex`, which is what the reader actually navigates by.
+ *
+ * Callers must only pass text that already had any rule-based exclusions
+ * applied (the English-only corpus sits on the DOM path for exactly that
+ * reason: it must drop the `source-text` column).
+ */
+export function chunkPlainText(
+  text: string,
+  sectionIndex: number,
+  chapterTitle: string,
+  bookHash: string,
+  options?: Partial<ChunkOptions>,
+): ChunkRow[] {
+  const opts: ChunkOptions = { ...DEFAULT_OPTIONS, ...options };
+  if (text.trim().length === 0) return [];
+
+  const windows = planWindows(text, opts);
+  const spineStep = (sectionIndex + 1) * 2;
+  const sectionCfi = `epubcfi(/6/${spineStep}!)`;
+  const out: ChunkRow[] = [];
+  let position = 0;
+  for (const w of windows) {
+    const sliceText = text.slice(w.start, w.end).trim();
+    if (sliceText.length === 0) continue;
+    out.push({
+      id: `${bookHash}-${sectionIndex}-${position}`,
+      bookHash,
       sectionIndex,
       chapterTitle,
-      bookHash,
-    );
+      startCfi: sectionCfi,
+      endCfi: sectionCfi,
+      positionIndex: position,
+      text: sliceText,
+      tokenCount: tokenCount(sliceText),
+    });
+    position++;
   }
-
-  const windows: Array<{ start: number; end: number }> = [];
-  let cursor = 0;
-  while (cursor < totalLen) {
-    const targetEnd = cursor + opts.maxChunkSize;
-    if (targetEnd >= totalLen) {
-      windows.push({ start: cursor, end: totalLen });
-      break;
-    }
-    const snappedEnd = findBreakPoint(flatText, targetEnd, opts.breakSearchRange);
-    // Guarantee forward progress even if the breakpoint search returns <= cursor.
-    const end = snappedEnd > cursor ? snappedEnd : Math.min(totalLen, cursor + opts.maxChunkSize);
-    windows.push({ start: cursor, end });
-    cursor = end > opts.overlapSize ? end - opts.overlapSize : end;
-    if (cursor >= totalLen) break;
-  }
-
-  return buildChunks(windows, flatText, slices, doc, sectionIndex, chapterTitle, bookHash);
+  return out;
 }
 
 function buildChunks(
