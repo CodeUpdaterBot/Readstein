@@ -282,6 +282,22 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   // a reload and a back-navigation, exactly like the other search options.
   const [spiralMode, setSpiralMode] = useState(searchParams?.get('spiral') === '1');
   const [libraryChatOpen, setLibraryChatOpen] = useState(false);
+
+  // Library chat pane: drag its left edge to resize, or drag past 90% of the
+  // window to snap to full width. The width is remembered across restarts.
+  const LIBRARY_CHAT_MIN_WIDTH = 320;
+  const LIBRARY_CHAT_WIDTH_KEY = 'readstein-library-chat-width';
+  const [libraryChatWidth, setLibraryChatWidth] = useState<number>(() => {
+    try {
+      const saved = Number(window.localStorage.getItem(LIBRARY_CHAT_WIDTH_KEY));
+      if (Number.isFinite(saved) && saved >= LIBRARY_CHAT_MIN_WIDTH) return saved;
+    } catch {
+      // Private mode or a blocked store — the default below is fine.
+    }
+    return 416;
+  });
+  const [libraryChatExpanded, setLibraryChatExpanded] = useState(false);
+  const libraryChatDrag = useRef<{ startX: number; startWidth: number } | null>(null);
   const pendingLibrarySearchQueryRef = useRef<string | null>(null);
   const [librarySearchProgress, setLibrarySearchProgress] = useState<number | null>(null);
   const [librarySearchHistory, setLibrarySearchHistory] = useState<string[]>([]);
@@ -2232,13 +2248,58 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
         </ModalPortal>
       )}
       {libraryChatOpen && (
-        <div className='fixed inset-y-0 end-0 z-50 flex w-full max-w-[26rem] flex-col shadow-xl'>
+        <div
+          className='fixed inset-y-0 end-0 z-50 flex flex-col shadow-xl'
+          style={{
+            width: libraryChatExpanded ? '100%' : `${libraryChatWidth}px`,
+            maxWidth: '100%',
+          }}
+        >
+          {/* Drag the pane's leading edge. Past 90% of the window it snaps to
+              full width, and dragging back restores the width it had. */}
+          <div
+            role='separator'
+            aria-label='Resize library chat'
+            aria-orientation='vertical'
+            className='hover:bg-primary/30 active:bg-primary/50 absolute inset-y-0 start-0 z-10 w-1.5 cursor-col-resize'
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              libraryChatDrag.current = { startX: e.clientX, startWidth: libraryChatWidth };
+            }}
+            onPointerMove={(e) => {
+              const drag = libraryChatDrag.current;
+              if (!drag) return;
+              const next = Math.max(
+                LIBRARY_CHAT_MIN_WIDTH,
+                drag.startWidth + (drag.startX - e.clientX),
+              );
+              // Snap rather than clamp: full width is a mode, not a size.
+              if (next >= window.innerWidth * 0.9) setLibraryChatExpanded(true);
+              else {
+                setLibraryChatExpanded(false);
+                setLibraryChatWidth(next);
+              }
+            }}
+            onPointerUp={() => {
+              libraryChatDrag.current = null;
+              try {
+                window.localStorage.setItem(LIBRARY_CHAT_WIDTH_KEY, String(libraryChatWidth));
+              } catch {
+                // Non-fatal: the pane still resizes, it just won't be remembered.
+              }
+            }}
+            onPointerCancel={() => {
+              libraryChatDrag.current = null;
+            }}
+          />
           <LibraryAssistant
             appService={appService}
             books={currentBookshelf}
             aiSettings={settings?.aiSettings}
             onOpenCitation={handleOpenLibraryCitation}
             onClose={() => setLibraryChatOpen(false)}
+            expanded={libraryChatExpanded}
+            onToggleExpand={() => setLibraryChatExpanded((v) => !v)}
           />
         </div>
       )}

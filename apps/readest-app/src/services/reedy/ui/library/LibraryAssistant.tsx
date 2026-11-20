@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { RotateCw, X } from 'lucide-react';
+import { Maximize2, Minimize2, RotateCw, X } from 'lucide-react';
 import type { AppService } from '@/types/system';
 import type { Book } from '@/types/book';
 import type { AISettings } from '@/services/ai/types';
@@ -40,6 +40,9 @@ export interface LibraryAssistantProps {
   /** Open a cited work at a CFI (null/absent book hash → the citation's own work). */
   onOpenCitation: (bookHash: string | null, cfi: string) => void;
   onClose: () => void;
+  /** The pane is at full width. The parent owns the resize state. */
+  expanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 /**
@@ -58,6 +61,8 @@ export function LibraryAssistant({
   aiSettings,
   onOpenCitation,
   onClose,
+  expanded,
+  onToggleExpand,
 }: LibraryAssistantProps) {
   const models = useMemo(() => (aiSettings ? createReedyModels(aiSettings) : null), [aiSettings]);
   const [ready, setReady] = useState<{ db: ReedyDbLike; retriever: BookRetriever } | null>(null);
@@ -161,6 +166,17 @@ export function LibraryAssistant({
           </span>
         </div>
         <div className='flex shrink-0 items-center gap-0.5'>
+          {onToggleExpand ? (
+            <button
+              type='button'
+              onClick={onToggleExpand}
+              aria-label={expanded ? 'Restore chat width' : 'Expand chat to full window'}
+              title={expanded ? 'Restore width' : 'Full window'}
+              className='text-base-content/50 hover:text-base-content touch-target flex size-7 items-center justify-center rounded-full'
+            >
+              {expanded ? <Minimize2 className='size-4' /> : <Maximize2 className='size-4' />}
+            </button>
+          ) : null}
           {status.phase === 'ready' ? (
             <button
               type='button'
