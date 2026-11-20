@@ -387,6 +387,34 @@ describe('ReedyDb', () => {
     });
   });
 
+  describe('book centroids', () => {
+    it('backfills from stored vectors and routes by cosine', async () => {
+      await reedy.ensureEmbeddingsTable(4);
+      await reedy.ensureCentroidTable(4);
+      await reedy.insertChunks([
+        chunk('e1', 'bookE', 0, 'alpha'),
+        chunk('e2', 'bookE', 1, 'beta'),
+        chunk('f1', 'bookF', 0, 'gamma'),
+        chunk('f2', 'bookF', 1, 'delta'),
+      ]);
+      await reedy.insertEmbeddings([
+        { chunkId: 'e1', bookHash: 'bookE', embedding: unitVec([1, 0, 0, 0]) },
+        { chunkId: 'e2', bookHash: 'bookE', embedding: unitVec([1, 0, 0, 0]) },
+        { chunkId: 'f1', bookHash: 'bookF', embedding: unitVec([0, 0, 0, 1]) },
+        { chunkId: 'f2', bookHash: 'bookF', embedding: unitVec([0, 0, 0, 1]) },
+      ]);
+
+      // Backfill reads the vectors already stored — a stored vector32 comes back
+      // as a float32 Buffer, and the mean of each book is what routes.
+      expect(await reedy.backfillBookCentroids()).toBe(2);
+      // Idempotent: a second pass has nothing left to write.
+      expect(await reedy.backfillBookCentroids()).toBe(0);
+
+      expect(await reedy.nearestBooks(unitVec([1, 0, 0, 0]), 1)).toEqual(['bookE']);
+      expect(await reedy.nearestBooks(unitVec([0, 0, 0, 1]), 1)).toEqual(['bookF']);
+    });
+  });
+
   describe('chunk ranking without an fts index', () => {
     it('routes lexically by LIKE and ranks by the vector half', async () => {
       await reedy.dropChunkFtsIndex();

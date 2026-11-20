@@ -134,6 +134,7 @@ export class BookIndexer {
       }
 
       await this.reedy.ensureEmbeddingsTable(dim);
+      await this.reedy.ensureCentroidTable(dim);
       await this.reedy.insertChunks(chunks, {
         // Bounded transactions, so a long write reports progress instead of
         // holding the lock silently (see ReedyDb.insertChunks).
@@ -141,7 +142,10 @@ export class BookIndexer {
           options.onProgress?.({ phase: 'writing', current: done, total }),
       });
 
-      await this.embedAndStore(chunks, model, dim, options);
+      const centroid = await this.embedAndStore(chunks, model, dim, options);
+      // The work's shortlist vector. This is only the routing entry point: the
+      // chunks themselves are still stored and cited in full.
+      if (centroid) await this.reedy.upsertBookCentroid(bookHash, centroid);
 
       await this.reedy.setIndexingStatus(bookHash, 'indexed', {
         chunkCount: chunks.length,
@@ -256,10 +260,14 @@ export class BookIndexer {
     model: EmbeddingModel,
     dim: number,
     options: IndexBookOptions,
-  ): Promise<void> {
+  ): Promise<number[] | null> {
     const batchSize = Math.max(1, model.batchSize ?? DEFAULT_BATCH_SIZE);
     const total = chunks.length;
     let done = 0;
+    // Running mean, kept for the book's centroid — the same vectors, so the
+    // shortlist costs nothing extra to compute.
+    let sum: number[] | null = null;
+    let counted = 0;
     for (let i = 0; i < total; i += batchSize) {
       if (options.signal?.aborted) {
         throw new Error('indexing aborted');
@@ -274,6 +282,11 @@ export class BookIndexer {
           `embedding model returned ${vectors.length} vectors for ${batch.length} inputs`,
         );
       }
+      if (!sum) sum = new Array(dim).fill(0);
+      for (const v of vectors) {
+        for (let d = 0; d < dim; d++) sum[d] = (sum[d] ?? 0) + (v[d] ?? 0);
+        counted++;
+      }
       const rows: EmbeddingRow[] = batch.map((c, j) => {
         const v = vectors[j]!;
         if (v.length !== dim) {
@@ -287,6 +300,8 @@ export class BookIndexer {
       done += batch.length;
       options.onProgress?.({ phase: 'embedding', current: done, total });
     }
+    if (!sum || counted === 0) return null;
+    return sum.map((n) => n / counted);
   }
 }
 

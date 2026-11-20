@@ -126,6 +126,9 @@ export class ReedyDb {
    */
   private writeQueue: Promise<unknown> = Promise.resolve();
 
+  /** In-flight centroid backfill, so it runs at most once at a time. */
+  private centroidBackfill: Promise<void> | null = null;
+
   constructor(private readonly db: DatabaseService) {}
 
   private enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -756,6 +759,110 @@ export class ReedyDb {
    * which is what keeps a library-wide query bounded.
    */
   /**
+   * One vector per book — the mean of its chunk embeddings.
+   *
+   * This is the shortlist, nothing more: a library-wide question is routed to
+   * the handful of works that are semantically near it by comparing against
+   * ~260 vectors instead of every chunk in the corpus. The deep search and the
+   * citations are unchanged — chunks are still retrieved and cited inside the
+   * selected works, which is what keeps an answer attributable.
+   *
+   * Mirrors ensureEmbeddingsTable's contract: created lazily at the active
+   * model's dim, and rebuilt if the stored width belongs to a different model
+   * (vectors at two widths cannot be compared).
+   */
+  async ensureCentroidTable(dim: number): Promise<void> {
+    if (!Number.isInteger(dim) || dim <= 0) {
+      throw new Error(`ensureCentroidTable: dim must be a positive integer, got ${dim}`);
+    }
+    await this.enqueue(async () => {
+      const rows = await this.db.select<{ sql: string }>(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'reedy_book_centroids'",
+      );
+      const existing = rows[0]?.sql;
+      if (existing) {
+        const m = existing.match(/vector32\s*\(\s*(\d+)\s*\)/i);
+        if (m && Number(m[1]) === dim) return;
+        await this.db.execute('DROP TABLE IF EXISTS reedy_book_centroids');
+      }
+      await this.db.execute(
+        `CREATE TABLE reedy_book_centroids (book_hash TEXT PRIMARY KEY, embedding vector32(${dim}))`,
+      );
+    });
+  }
+
+  async upsertBookCentroid(bookHash: string, embedding: number[]): Promise<void> {
+    if (embedding.length === 0) return;
+    await this.enqueue(() =>
+      this.db.execute(
+        `INSERT INTO reedy_book_centroids (book_hash, embedding) VALUES (?, vector32(?))
+         ON CONFLICT (book_hash) DO UPDATE SET embedding = excluded.embedding`,
+        [bookHash, serializeVector(embedding)],
+      ),
+    );
+  }
+
+  /** The books whose centroid is nearest the query — the routing shortlist. */
+  async nearestBooks(queryEmbedding: number[], limit: number): Promise<string[]> {
+    if (limit <= 0) return [];
+    try {
+      const rows = await this.db.select<{ book_hash: string }>(
+        `SELECT book_hash FROM reedy_book_centroids
+          ORDER BY vector_distance_cos(embedding, vector32(?)) ASC
+          LIMIT ?`,
+        [serializeVector(queryEmbedding), limit],
+      );
+      return rows.map((r) => r.book_hash);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Give every already-indexed book a centroid, computed from the chunk
+   * vectors already stored — no re-embedding, so no API cost for a corpus
+   * indexed before centroids existed. Reads one book at a time so peak memory
+   * stays at a single work's vectors rather than the shelf's.
+   */
+  async backfillBookCentroids(): Promise<number> {
+    let written = 0;
+    try {
+      const books = await this.db.select<{ book_hash: string }>(
+        `SELECT DISTINCT e.book_hash AS book_hash
+           FROM reedy_book_chunk_embeddings e
+          WHERE e.book_hash NOT IN (SELECT book_hash FROM reedy_book_centroids)`,
+      );
+      for (const { book_hash: hash } of books) {
+        const rows = await this.db.select<{ embedding: unknown }>(
+          'SELECT embedding FROM reedy_book_chunk_embeddings WHERE book_hash = ?',
+          [hash],
+        );
+        const mean = meanOfEncodedVectors(rows.map((r) => r.embedding));
+        if (!mean) continue;
+        await this.upsertBookCentroid(hash, mean);
+        written++;
+      }
+    } catch {
+      // A missing table or a foreign-key surprise: routing falls back to the
+      // lexical path, which is correct if slower. Never fatal.
+    }
+    return written;
+  }
+
+  /** Runs the backfill at most once per instance; the retriever calls it lazily. */
+  async ensureCentroids(): Promise<void> {
+    if (this.centroidBackfill) return this.centroidBackfill;
+    const run = this.backfillBookCentroids()
+      .then(() => undefined)
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.centroidBackfill === run) this.centroidBackfill = null;
+      });
+    this.centroidBackfill = run;
+    return run;
+  }
+
+  /**
    * Candidate books for a library-wide question, by lexical match on the
    * query's significant words.
    *
@@ -802,6 +909,36 @@ export class ReedyDb {
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * A stored `vector32` column reads back as a Buffer of raw float32 bytes;
+ * decode that to the original numbers. Null for anything unexpected, so callers
+ * degrade rather than throw.
+ */
+function decodeEncodedVector(value: unknown): number[] | null {
+  if (ArrayBuffer.isView(value)) {
+    const view = value as ArrayBufferView;
+    const copy = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
+    return Array.from(new Float32Array(copy as ArrayBuffer));
+  }
+  if (Array.isArray(value)) return (value as number[]).map(Number);
+  return null;
+}
+
+/** Mean of stored vectors, or null when nothing decoded. */
+function meanOfEncodedVectors(values: unknown[]): number[] | null {
+  let sum: number[] | null = null;
+  let count = 0;
+  for (const value of values) {
+    const v = decodeEncodedVector(value);
+    if (!v || (sum && v.length !== sum.length)) continue;
+    if (!sum) sum = new Array(v.length).fill(0);
+    for (let i = 0; i < v.length; i++) sum[i] = (sum[i] ?? 0) + (v[i] ?? 0);
+    count++;
+  }
+  if (!sum || count === 0) return null;
+  return sum.map((n) => n / count);
+}
 
 interface ScoredChunkRowSql {
   id: string;

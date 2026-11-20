@@ -175,8 +175,22 @@ export class BookRetriever {
     const queryEmbedding = embedding ?? new Array(args.activeEmbeddingModel.dim).fill(0);
 
     const routeBooks = args.routeBooks ?? DEFAULT_ROUTE_BOOKS;
+    // Route semantically first: the book vector is the shortlist, so a question
+    // is matched by meaning against ~one vector per work rather than by scanning
+    // every chunk. A corpus indexed before centroids existed gets them here,
+    // once, computed from the vectors already stored — no re-embedding.
+    let nearby = await this.reedy.nearestBooks(queryEmbedding, routeBooks);
+    if (nearby.length === 0 && !degraded) {
+      await this.reedy.ensureCentroids();
+      nearby = await this.reedy.nearestBooks(queryEmbedding, routeBooks);
+    }
+    // Lexical routing still earns a slot: an exact term the vectors blur past
+    // (a name, a code word) should not be lost to a semantic near-miss.
     const routed = await this.reedy.ftsCandidateBooks(args.query, routeBooks);
-    const books = [...new Set([...routed, ...(args.semanticBooks ?? [])])];
+    const books = [...new Set([...nearby, ...routed, ...(args.semanticBooks ?? [])])].slice(
+      0,
+      routeBooks * 2,
+    );
 
     let scored: ScoredChunk[];
     if (books.length > 0) {
