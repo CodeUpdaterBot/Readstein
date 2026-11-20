@@ -21,7 +21,12 @@ export function openReedy(appService: AppService): Promise<ReedyHandle> {
       const svc = await appService.openDatabase('reedy', 'reedy.db', 'Data', {
         experimental: ['index_method'],
       });
-      return { svc, db: new ReedyDb(svc) };
+      const db = new ReedyDb(svc);
+      // A library sweep drops the chunk-text FTS index while it bulk-inserts and
+      // restores it when it finishes; if that sweep never finished, restore it
+      // here so lexical search is not silently left degraded.
+      void db.ensureChunkFtsIndex().catch(() => {});
+      return { svc, db };
     })();
     shared = opening;
     void opening.catch(() => {

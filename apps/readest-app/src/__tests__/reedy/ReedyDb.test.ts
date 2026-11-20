@@ -385,6 +385,42 @@ describe('ReedyDb', () => {
     });
   });
 
+  describe('chunk fts index lifecycle', () => {
+    it('inserts with the index dropped, and retrieval works again after rebuild', async () => {
+      await reedy.dropChunkFtsIndex();
+      await reedy.ensureEmbeddingsTable(4);
+      await reedy.insertChunks([
+        chunk('d1', 'bookD', 0, 'grapes nectarines and pomegranate'),
+        chunk('d2', 'bookD', 1, 'quince and persimmon'),
+      ]);
+      await reedy.insertEmbeddings([
+        { chunkId: 'd1', bookHash: 'bookD', embedding: unitVec([1, 0, 0, 0]) },
+        { chunkId: 'd2', bookHash: 'bookD', embedding: unitVec([0, 1, 0, 0]) },
+      ]);
+
+      // While absent, retrieval still works rather than throwing.
+      const degraded = await reedy.hybridSearch({
+        queryText: 'pomegranate',
+        queryEmbedding: unitVec([1, 0, 0, 0]),
+        k: 5,
+      });
+      expect(degraded.length).toBeGreaterThan(0);
+
+      await reedy.ensureChunkFtsIndex();
+      const candidates = await reedy.ftsCandidateBooks('pomegranate', 5);
+      expect(candidates).toContain('bookD');
+
+      const rebuilt = await reedy.hybridSearch({
+        bookHash: 'bookD',
+        queryText: 'quince',
+        // Deliberately misaligned so the lexical half is what surfaces it.
+        queryEmbedding: unitVec([1, 0, 0, 0]),
+        k: 5,
+      });
+      expect(rebuilt.map((r) => r.id)).toContain('d2');
+    });
+  });
+
   describe('insertChunks', () => {
     it('writes in bounded transactions and reports progress', async () => {
       const total = 450;

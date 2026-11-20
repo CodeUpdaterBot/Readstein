@@ -168,6 +168,14 @@ export class LibraryIndexer {
       ...tally(),
     });
 
+    // Insert the whole corpus with the chunk-text FTS index dropped and rebuild
+    // it once at the end. Maintaining it per insert costs ~3s per 200 rows and
+    // grows with the index — quadratic over a shelf — while the same rows go in
+    // at ~370ms flat, and one bulk build over the result takes a fraction of a
+    // second (see ReedyDb.dropChunkFtsIndex). Search degrades to its vector half
+    // for the duration, which is already the documented behaviour.
+    await this.reedy.dropChunkFtsIndex();
+
     let i = 0;
     for (const candidate of kept) {
       if (options.signal?.aborted) {
@@ -271,6 +279,10 @@ export class LibraryIndexer {
       }
       options.onBookDone?.(book);
     }
+
+    // One bulk index build over everything just written — the point of having
+    // dropped it up front.
+    await this.reedy.rebuildChunkFtsIndex();
 
     options.onProgress?.({
       phase: 'done',

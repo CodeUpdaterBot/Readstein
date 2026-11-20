@@ -658,6 +658,45 @@ export class ReedyDb {
   }
 
   /**
+   * Drop the chunk-text FTS index so a bulk ingest can insert without paying
+   * for it, then restore it in one pass.
+   *
+   * Maintaining that index inside every insert is what made a whole-shelf
+   * build impossible. Measured on this machine: a 200-row batch costs ~3.1s
+   * with the index present and the cost grows with the index (33.7s per batch
+   * by 2,400 rows) — quadratic over a corpus — while the same rows insert in
+   * ~370ms flat with the index absent, and a single bulk CREATE INDEX over
+   * 2,000 rows takes 241ms. The index is also ~10x the text on disk.
+   *
+   * Retrieval is unaffected: fts_match/fts_score answer identically against a
+   * rebuilt index, and they keep matching even while it is absent (the engine
+   * scans instead), so a search during a sweep loses speed, not correctness.
+   */
+  async dropChunkFtsIndex(): Promise<void> {
+    await this.enqueue(() => this.db.execute('DROP INDEX IF EXISTS idx_chunks_fts'));
+  }
+
+  async rebuildChunkFtsIndex(): Promise<void> {
+    await this.enqueue(() =>
+      this.db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_chunks_fts ON reedy_book_chunks USING fts (text) WITH (tokenizer = 'ngram')",
+      ),
+    );
+  }
+
+  /**
+   * Self-heal: a sweep drops the index while it ingests and restores it at the
+   * end, so a sweep killed mid-run leaves it absent and lexical search
+   * degraded. One sqlite_master lookup in the normal case.
+   */
+  async ensureChunkFtsIndex(): Promise<void> {
+    const rows = await this.db.select<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_chunks_fts'",
+    );
+    if (rows.length === 0) await this.rebuildChunkFtsIndex();
+  }
+
+  /**
    * Cheap candidate generation for the library scope: the distinct books that
    * have at least one chunk matching the query lexically, ranked by their best
    * FTS score. Used by LibraryRetriever to route a library-wide question to a
