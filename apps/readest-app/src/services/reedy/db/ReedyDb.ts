@@ -948,8 +948,16 @@ export class ReedyDb {
   /** Runs the backfill at most once per instance; the retriever calls it lazily. */
   async ensureCentroids(): Promise<void> {
     if (this.centroidBackfill) return this.centroidBackfill;
-    const run = this.backfillBookCentroids()
-      .then(() => undefined)
+    const run = (async () => {
+      // The table is created lazily at the active dim, so it must be made to
+      // exist BEFORE it is queried — a corpus indexed before centroids existed
+      // has no table at all, and every read against it would fail (silently,
+      // which is worse: routing would just never use the shortlist).
+      const dim = await this.embeddingsDim();
+      if (dim == null) return;
+      await this.ensureCentroidTable(dim);
+      await this.backfillBookCentroids();
+    })()
       .catch(() => undefined)
       .finally(() => {
         if (this.centroidBackfill === run) this.centroidBackfill = null;
